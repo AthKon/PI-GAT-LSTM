@@ -56,7 +56,8 @@ its size (on the order of tens of gigabytes) and because it is jointly held by t
 developers. It is available from the corresponding author on reasonable request.
 
 Trained model checkpoints and the evaluation outputs the analysis scripts consume are archived
-separately at 4TU.ResearchData: [DOI pending].
+separately at 4TU.ResearchData:
+[doi.org/10.4121/e3f167ac-2925-4815-956e-5ef3d883f1a5](https://doi.org/10.4121/e3f167ac-2925-4815-956e-5ef3d883f1a5).
 
 ## Reference
 
