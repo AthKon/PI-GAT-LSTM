@@ -4,7 +4,7 @@ Code accompanying the manuscript *"Spatial Super-Resolution of Mooring Tension u
 submitted to *Ocean Engineering*, mooring/anchoring/cable-systems special issue).
 
 A mooring line is represented as a chain graph. A GATv2 spatial encoder captures coupling between
-neighbouring stations, a per-node LSTM captures each station's temporal evolution, and a shared
+neighbouring stations, a per-node LSTM captures each station's temporal evolution, and a shared 
 head reconstructs the whole-line tension field from motion alone (x, z position and velocity;
 no tension input). One trained weight set spans ten sensor layouts (4 to 21 stations) and ten
 offshore locations, two of which are held out to test generalisation.
