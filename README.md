@@ -1,6 +1,6 @@
-# GAT-LSTM Mooring Line Tension Reconstruction — Paper A code
+# GAT-LSTM Mooring Line Tension Reconstruction
 
-Code accompanying the manuscript *"[title pending]"* (Konstantaras, Colomés Gené, Aguilar Lopez;
+Code accompanying the manuscript *"Spatial Super-Resolution of Mooring Tension using a Topology-General, Physics-Informed Graph Attention Network"* (Konstantaras, Colomés Gené, Aguilar Lopez;
 submitted to *Ocean Engineering*, mooring/anchoring/cable-systems special issue).
 
 A mooring line is represented as a chain graph. A GATv2 spatial encoder captures coupling between
@@ -27,7 +27,7 @@ the network can be queried at more output stations than it was given as input (e
 ## Analysis and figure/table scripts
 
 Every number, table and figure reported in the manuscript is produced by one of these scripts from
-the models' saved evaluation outputs (`.csv`/`.npz`), not typed by hand:
+the models' saved evaluation outputs (`.csv`/`.npz`):
 
 | script | purpose |
 |---|---|
