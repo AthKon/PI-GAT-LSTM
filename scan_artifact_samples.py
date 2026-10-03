@@ -45,13 +45,14 @@ Runs locally in ~1 min, one memory-mapped case at a time (peak RSS ~35 MB).
 """
 import argparse
 import csv
+import os
 import pathlib
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 
-CACHE = pathlib.Path(r"C:\Users\thano\Desktop\data\cache_npy")
+CACHE = pathlib.Path(os.environ.get("MOORING_CACHE_DIR", r"C:\Users\thano\Desktop\data\cache_npy"))
 OUT = pathlib.Path(__file__).with_name("artifact_samples_cat.csv")
 ART_T, ART_ISO, ART_COH, ART_FAIR = 10_000.0, 10.0, 3.0, 3.0
 CEILING = 50_000.0

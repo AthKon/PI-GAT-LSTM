@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+# outputs of paperA_numbers.py / paperA_figures.py when PAPERA_DATA is set
+paperA_output/
+# the unpacked 4TU archives, if kept inside the working copy
+stage1_matched/
+stage2_superres/
+linear_baseline/

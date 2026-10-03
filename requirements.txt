@@ -1,0 +1,18 @@
+# Python 3.11. Versions of the software stack that produced the deposited results
+# (DelftBlue cluster, 2025 module stack): Stage 2 training, every evaluation and the
+# linear baselines. Stage 1 was trained with Python 3.10.13 and PyTorch 2.1.0.
+#
+# Loading a checkpoint needs only torch, torch_geometric and numpy; it was also tested
+# with Python 3.11.9, PyTorch 2.11.0 (CPU) and PyTorch Geometric 2.7.0. The analysis
+# scripts (paperA_*.py) need only numpy and matplotlib; they were run with NumPy 2.4.4
+# and Matplotlib 3.10.9. See README.md, "Software".
+torch==2.5.1                # CUDA 12.5 build on the cluster; a CPU build loads the checkpoints
+torch_geometric==2.7.0
+numpy==1.26.4
+pandas==2.2.3               # Linear_Regression.ipynb
+psutil                      # Linear_Regression.ipynb (memory guard of its worker pool)
+matplotlib==3.9.2
+scipy                       # only with PAPERA_RECOMPUTE=1 (noise frequency bands)
+nbconvert==7.17.1           # executing the notebooks non-interactively
+jupyter_client==8.8.0
+ipykernel

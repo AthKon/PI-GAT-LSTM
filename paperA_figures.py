@@ -19,6 +19,10 @@ exception is the pair of snap-station figures, whose panels are chosen as illust
 named one by one in SNAP_PANELS_SONE / SNAP_PANELS_STWO; the manuscript says so, and the
 capture distribution they illustrate is Table 11, computed over the full test sets.
 
+Inputs are found through paperA_paths.py (development layout, or the unpacked 4TU archives
+when PAPERA_DATA is set). Figures 4, 8 and D.1 read the seabed contact from the raw simulations
+(MOORING_CACHE_DIR) and are skipped when that cache is absent.
+
 Usage
   python paperA_figures.py            # all figures -> paper_A_manuscript/figures/
   python paperA_figures.py --png DIR  # also write PNG previews into DIR
@@ -39,6 +43,8 @@ import matplotlib.ticker
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
+import paperA_paths as P
+from paperA_paths import npload
 import plot_tension_along_line as ALONG   # window collection, flagged cases, contact
 
 ROOT = pathlib.Path(__file__).parent
@@ -51,7 +57,7 @@ EVAL_CLEAN = ROOT / "Results" / "SR_RESULTS" / "checkpoints_P2_eval_clean"
 T1, T2 = EVAL_CLEAN / "stage1", EVAL_CLEAN
 SNAP_CAT = ROOT / "snap_catalogue_cat.csv"
 MASK_EVAL = ROOT / "artifact_samples_cat.csv"
-OUT = ROOT / "paper_A_manuscript" / "figures"
+OUT = P.OUT_DIR / "figures"
 DT = 0.1
 
 FULL_W, COL_W = 6.84, 3.30
@@ -82,7 +88,7 @@ def eval_mask_hit(loc, case, start, n):
     """True if the window [start, start + n) holds a sample of the evaluation mask."""
     global _MASK
     if _MASK is None:
-        with open(MASK_EVAL, newline="", encoding="utf-8") as fh:
+        with P.open_(MASK_EVAL, newline="", encoding="utf-8") as fh:
             _MASK = {(int(r["loc"]), int(r["case"])): np.array(sorted(int(x) for x in r["bad_t"].split()))
                      for r in csv.DictReader(fh)}
     b = _MASK.get((int(loc), int(case)))
@@ -109,7 +115,7 @@ def shade_contact(ax, inc, t):
 
 
 def save(fig, name, png_dir):
-    OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / f"{name}.pdf", bbox_inches="tight", pad_inches=0.02)
     if png_dir:
         png_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +155,7 @@ ALONG_ROWS = [(6, "v5", "ty2"),             # loc07/0228, Hs 1.17 m -- calm; sta
 
 
 def fig_along_line(png_dir):
-    dumps = {k: np.load(v, allow_pickle=True) for k, v in DUMPS.items()}
+    dumps = {k: npload(v, allow_pickle=True) for k, v in DUMPS.items()}
     dirty = ALONG.flagged_cases()
     fig, axes = plt.subplots(len(ALONG_ROWS), 3, figsize=(FULL_W, 7.3), squeeze=False)
     sites, kinds = [], []
@@ -224,7 +230,7 @@ def snap_event_table(z):
 
 
 def fig_peaks(png_dir):
-    z = np.load(T1 / "test_timeseries_dump.npz")
+    z = npload(T1 / "test_timeseries_dump.npz")
     meta, pt, pp = z["meta_all"], z["peak_true_all"] / 1e3, z["peak_pred_all"] / 1e3
     keys = {(int(a), int(b), int(c), int(d)) for a, b, c, d, _t in z["snap_ev"]}
     snap = np.array([(int(m[0]), int(m[1]), int(m[2]), int(m[3])) in keys for m in meta])
@@ -344,7 +350,7 @@ def snap_station_candidates(z, stage2=False, into=None):
     """
     import re
     cat = {(int(r["loc"]), int(r["case"]), int(r["t"])): r
-           for r in csv.DictReader(open(SNAP_CAT, encoding="utf-8"))}
+           for r in csv.DictReader(P.open_(SNAP_CAT, encoding="utf-8"))}
     edge = int(round(3.0 / DT))
     out = {} if into is None else into
     stems = r"^((?:nc\d+_)?(?:sn|ty|hi|un)\d+|site\d+_n\d+_(?:cl|sn)\d+)_evrows$"
@@ -401,8 +407,8 @@ def snap_panels(stage2=False):
     cand = {}
     for d in ((S2, S2W, T2) if stage2 else (SF,)):
         f = d / "test_timeseries_dump.npz"
-        if f.exists():
-            snap_station_candidates(np.load(f, allow_pickle=True), stage2, cand)
+        if P.exists(f):
+            snap_station_candidates(npload(f, allow_pickle=True), stage2, cand)
     by_row = {(r["loc"], r["case"], r["nc"], r["row"]): r for r in cand.values()}
     keys = SNAP_PANELS_STWO if stage2 else SNAP_PANELS_SONE
     missing = [k for k in keys if k not in by_row]
@@ -475,7 +481,7 @@ LAYOUTS = (4, 5, 6, 7, 8, 10, 12, 15, 18, 21)
 
 def _grid(name):
     """{(N_in, N_out): row} from one of the Stage-2 grid CSVs."""
-    with open(T2 / name, newline="", encoding="utf-8") as fh:
+    with P.open_(T2 / name, newline="", encoding="utf-8") as fh:
         return {(int(r["N_in"]), int(r["N_out"])): r for r in csv.DictReader(fh)}
 
 
@@ -541,7 +547,7 @@ def _samples_in_window(path, col, loc, case, start, n):
     hit = []
     if not path.exists():
         return hit
-    with open(path, newline="", encoding="utf-8") as fh:
+    with P.open_(path, newline="", encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             if int(r["loc"]) != loc or int(r["case"]) != case:
                 continue
@@ -563,7 +569,7 @@ def assert_four_window_clean(loc, case, start, n):
 
 
 def four_sensor_window(stem=FOUR_STEM):
-    z = np.load(S2W / "test_timeseries_dump.npz", allow_pickle=True)
+    z = npload(S2W / "test_timeseries_dump.npz", allow_pickle=True)
     loc, case, nin, start = (int(v) for v in z[stem + "_meta"])
     assert nin == 4, nin
     true, pred = z[stem + "_true"], z[stem + "_pred"]
@@ -631,8 +637,8 @@ def fig_envelope(png_dir):
     """Share of snap events covered against the multiplier applied to the prediction,
     on the events common to the Stage-1 and Stage-2 test draws (per distinct event)."""
     import paperA_numbers as PN
-    ev1 = PN.snap_events(np.load(T1 / "test_timeseries_dump.npz"))
-    z2 = np.load(T2 / "test_timeseries_dump.npz")
+    ev1 = PN.snap_events(npload(T1 / "test_timeseries_dump.npz"))
+    z2 = npload(T2 / "test_timeseries_dump.npz")
     ev21, ev4 = PN.snap_events(z2, 21), PN.snap_events(z2, 4)
     common = sorted(set(ev1) & set(ev21) & set(ev4))
     fig, ax = plt.subplots(figsize=(COL_W, 2.25))
@@ -666,9 +672,9 @@ NOISE_STYLE = (("", 0.0, C_MUTED, "o"), ("_p010", 0.01, "#86b6ea", "s"),
 
 
 def _noise_curves(tag):
-    with open(SN / f"test_metrics_by_node_count{tag}.csv", newline="", encoding="utf-8") as fh:
+    with P.open_(SN / f"test_metrics_by_node_count{tag}.csv", newline="", encoding="utf-8") as fh:
         d = {int(r["node_count"]): float(r["MAE_tension"]) for r in csv.DictReader(fh)}
-    with open(SN / f"superres_grid_baseline{tag}.csv", newline="", encoding="utf-8") as fh:
+    with P.open_(SN / f"superres_grid_baseline{tag}.csv", newline="", encoding="utf-8") as fh:
         b = {int(r["N_in"]): float(r["MAE_tension"]) for r in csv.DictReader(fh) if int(r["N_out"]) == 21}
     return np.array([d[n] for n in LAYOUTS]), np.array([b[n] for n in LAYOUTS])
 
@@ -753,10 +759,122 @@ def fig_grid(png_dir):
     save(fig, "fig_grid", png_dir)
 
 
+# ------------------------------------------------------------------ Appendix D (linear regression)
+# Stage 1 against LR4, the longest-memory linear model of Linear_Regression.ipynb (cluster job
+# 885495), in one Stage-1 test window at the shallow withheld site loc10 (user, 2026-10-02: one
+# row only; further windows go to the data repository). The window is chosen on the ground truth
+# alone: among the stored reservoir windows (ty, sn: unbiased draws) of the screened Stage-1 dump at
+# loc10 with at least ten stations, from a simulation no artifact rule flags, the one with the
+# largest standard deviation of the true fairlead tension (the most dynamic sea state). LR3 is not
+# drawn: its traces differ from LR4's by 11-52 N on average in such windows.
+LR = ROOT / "Results" / "LR_baseline"
+LINEAR_SITES = ((10, 1),)                       # (site, windows)
+LINEAR_WINDOWS = [(10, 158, 10, 9884)]          # loc10/0158, typical window
+C_LR = "#eb6834"
+
+
+def linear_windows(z):
+    """Re-derive the window choice from the rule above and check it against LINEAR_WINDOWS."""
+    dirty = ALONG.flagged_cases()
+    cand = {}
+    for f in sorted(z.files):
+        if not f.endswith("_meta") or f[:-5].split("_")[-1][:2] not in ("ty", "sn"):
+            continue
+        m = tuple(int(v) for v in z[f])
+        if (m[2] >= 10 and m[0] in dict(LINEAR_SITES) and (m[0], m[1]) not in dirty
+                and not eval_mask_hit(m[0], m[1], m[3], z[f[:-5] + "_true"].shape[0])):
+            cand.setdefault(m, f[:-5])
+    chosen = []
+    for site, k in LINEAR_SITES:
+        pool = sorted((m for m in cand if m[0] == site),
+                      key=lambda m: -float(z[cand[m] + "_true"][:, -1].std()))
+        sims = []
+        for m in pool:
+            if m[1] not in sims:
+                sims.append(m[1])
+                chosen.append(m)
+            if len(sims) == k:
+                break
+    assert chosen == LINEAR_WINDOWS, chosen
+    return [(m, cand[m]) for m in chosen]
+
+
+def fig_linear(png_dir):
+    import csv as _csv
+    import linear_regression_lib as L       # torch; only this figure needs it
+    z = npload(T1 / "test_timeseries_dump.npz")
+    wins = linear_windows(z)
+    w = npload(LR / "weights.npz")
+    s3, s4 = npload(LR / "standardiser.npz"), npload(LR / "standardiser_lr4.npz")
+    pred = L.predict_windows(str(ALONG.CACHE_DIR), [m for m, _ in wins],
+                             {"LR4_lagged40": w["LR4_lagged40"]}, s3["mu"], s3["sd"],
+                             lags=L.LAGS_LONG, stand={"LR4_lagged40": (s4["mu"], s4["sd"])})
+    with P.open_(LR / "LR4_lagged40" / "test_per_window_stats.csv", newline="", encoding="utf-8") as fh:
+        job_mae = {(int(r["lc_id"]), int(r["case_id"]), int(r["n_in"]), int(r["start_idx"])):
+                   float(r["mae"]) for r in _csv.DictReader(fh)}
+    fig, axes = plt.subplots(len(wins), 3, figsize=(FULL_W, 2.45), squeeze=False)
+    for r, (m, stem) in enumerate(wins):
+        loc, case, N, start = m
+        true, s1, lr = z[stem + "_true"], z[stem + "_pred"], pred[m]["LR4_lagged40"]
+        # the recomputed traces are the job's: same truth, same per-window MAE
+        assert np.array_equal(pred[m]["true"], true), m
+        assert abs(float(np.abs(lr - true).mean()) - job_mae[m]) <= 1e-5 * job_mae[m], m
+        inc, frac = ALONG.contact_fraction(loc, case, start, true.shape[0], N)
+        nodes = ALONG.pick_nodes(frac)
+        h0, hs, tp = ALONG.sea_state(loc, case)
+        t = np.arange(true.shape[0]) * DT
+        for c, i in enumerate((nodes["grounded"], nodes["transition"], N - 1)):
+            ax = axes[r][c]
+            tr, p1, p4 = true[:, i] / 1e3, s1[:, i] / 1e3, lr[:, i] / 1e3
+            shade_contact(ax, inc[:, i], t)
+            ax.plot(t, tr, color=C_TRUE, lw=0.9, zorder=3)
+            ax.plot(t, p4, color=C_LR, lw=0.8, ls=(0, (4.0, 1.2, 1.0, 1.2)), zorder=4)
+            ax.plot(t, p1, color=C_BLUE, lw=0.9, ls=(0, (3.2, 1.6)), zorder=5)
+            lo = min(tr.min(), p1.min(), p4.min())
+            hi = max(tr.max(), p1.max(), p4.max())
+            pad = max(hi - lo, 1e-6)
+            ax.set_ylim(lo - 0.05 * pad, hi + 0.42 * pad)
+            ax.set_xlim(t[0], t[-1])
+            ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4, steps=[1, 2, 2.5, 5, 10]))
+            where = ("on seabed throughout" if frac[i] >= 0.98 else "suspended"
+                     if frac[i] <= 0.02 else f"on seabed {100 * frac[i]:.0f}% of window")
+            ax.text(0.015, 0.97, f"station {i}, {where}\n"
+                    f"MAE: Stage 1 {1e3 * np.abs(p1 - tr).mean():.0f} N, "
+                    f"LR4 {1e3 * np.abs(p4 - tr).mean():.0f} N",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=6.5, zorder=7)
+            if c == 0:
+                ax.set_ylabel("Tension [kN]")
+            if r == len(wins) - 1:
+                ax.set_xlabel("Time [s]")
+            else:
+                ax.set_xticklabels([])
+        role = "shallow training site" if loc == 6 else "withheld site"
+        tag = f"({'abcde'[r]})  " if len(wins) > 1 else ""
+        axes[r][0].annotate(
+            f"{tag}loc{loc:02d}, {role},  $N$ = {N},  $H_s$ = {hs:.1f} m,  $T_p$ = {tp:.1f} s",
+            xy=(0.0, 1.03), xycoords="axes fraction", ha="left", va="bottom", fontsize=7.5)
+        print(f"[linear] loc{loc:02d}/{case:04d} N={N} start {start}: stations "
+              f"{nodes['grounded']}/{nodes['transition']}/{N - 1}, touchdown station on the seabed "
+              f"{100 * frac[nodes['transition']]:.0f} %")
+    for c, title in enumerate(("Grounded", "Near touchdown", "Fairlead")):
+        axes[0][c].set_title(title, pad=16, fontsize=8, fontfamily="STIXGeneral")
+    fig.legend(handles=[Line2D([], [], color=C_TRUE, lw=1.1, label="Finite-element truth"),
+                        Line2D([], [], color=C_BLUE, lw=1.1, ls=(0, (3.2, 1.6)), label="Stage 1"),
+                        Line2D([], [], color=C_LR, lw=1.1, ls=(0, (4.0, 1.2, 1.0, 1.2)),
+                               label="LR4 (linear, lags to $\\pm$40 s)"),
+                        Patch(fc=C_BED, ec="none", label="Station on the seabed")],
+               loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.005))
+    fig.subplots_adjust(left=0.07, right=0.995, top=0.80, bottom=0.265, hspace=0.42, wspace=0.18)
+    save(fig, "fig_linear", png_dir)
+
+
 FIGURES = {"alongline": fig_along_line, "peaks": fig_peaks, "snaptraces": fig_snap_traces,
            "snaptraces_s2": fig_snap_traces_s2,
            "sweep": fig_sweep, "foursensor": fig_four_sensor,
-           "noise": fig_noise, "grid": fig_grid}
+           "noise": fig_noise, "grid": fig_grid, "linear": fig_linear}
+# Figures 4, 8 and D.1 take the true seabed contact (and Figure D.1 the linear models' inputs)
+# from the raw simulations.
+RAW_FIGURES = {"alongline", "foursensor", "linear"}
 # fig_envelope (the old Fig. 10, coverage of the line maximum) is no longer drawn: under the
 # fairlead condition the line maximum at every snap event is the fairlead's (user, 2026-09-24).
 
@@ -768,5 +886,8 @@ if __name__ == "__main__":
     png = pathlib.Path(args.png) if args.png else None
     for name, fn in FIGURES.items():
         if args.only and name not in args.only.split(","):
+            continue
+        if name in RAW_FIGURES and not P.CACHE.is_dir():
+            print(f"[fig] skipped {name}: it reads the raw simulations; set MOORING_CACHE_DIR")
             continue
         fn(png)

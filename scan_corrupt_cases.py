@@ -53,6 +53,7 @@ Usage
 """
 import argparse
 import csv
+import os
 import pathlib
 import sys
 import time
@@ -61,7 +62,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 import numpy as np
 
-CACHE_DIR = pathlib.Path(r"C:\Users\thano\Desktop\data\cache_npy")
+CACHE_DIR = pathlib.Path(os.environ.get("MOORING_CACHE_DIR", r"C:\Users\thano\Desktop\data\cache_npy"))
 
 # Current notebook blacklist (cell f80f8d84) -- non-finite OR peak > 1.5 MN.
 CORRUPT_CASES = frozenset({

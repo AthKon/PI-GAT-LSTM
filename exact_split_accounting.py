@@ -33,6 +33,7 @@ because a 1000-sample window straddles many artifacts.
 """
 import argparse
 import csv
+import os
 import pathlib
 import sys
 from collections import defaultdict
@@ -40,9 +41,11 @@ from collections import defaultdict
 sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 
-ROOT = pathlib.Path(r"C:\Users\thano\Desktop\Literature Master Thesis")
 HERE = pathlib.Path(__file__).parent
-CACHE = pathlib.Path(r"C:\Users\thano\Desktop\data\cache_npy")
+ROOT = HERE
+CACHE = pathlib.Path(os.environ.get("MOORING_CACHE_DIR", r"C:\Users\thano\Desktop\data\cache_npy"))
+# code repository: the derived tables live in data/
+TABLES = HERE if (HERE / "snap_catalogue.csv").exists() else HERE / "data"
 
 W = 1000
 BLOCK = 2000
@@ -166,8 +169,8 @@ def account(snaps, bad, nonfinite, steps, policy):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--catalogue", type=pathlib.Path, default=HERE / "snap_catalogue.csv")
-    ap.add_argument("--mask", type=pathlib.Path, default=HERE / "artifact_samples.csv")
+    ap.add_argument("--catalogue", type=pathlib.Path, default=TABLES / "snap_catalogue.csv")
+    ap.add_argument("--mask", type=pathlib.Path, default=TABLES / "artifact_samples.csv")
     args = ap.parse_args()
     print(f"catalogue: {args.catalogue.name} | mask: {args.mask.name}")
     snaps = load_snaps(args.catalogue)

@@ -78,6 +78,7 @@ Usage
 """
 import argparse
 import csv
+import os
 import pathlib
 import re
 import sys
@@ -90,9 +91,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-CACHE_DIR = pathlib.Path(r"C:\Users\thano\Desktop\data\cache_npy")
+CACHE_DIR = pathlib.Path(os.environ.get("MOORING_CACHE_DIR", r"C:\Users\thano\Desktop\data\cache_npy"))
 ROOT = pathlib.Path(__file__).resolve().parent
 SCAN_CSV = ROOT / "corrupt_scan.csv"
+if not SCAN_CSV.exists():                 # code repository: derived tables live in data/
+    SCAN_CSV = ROOT / "data" / "corrupt_scan.csv"
 DEFAULT_DIR = pathlib.Path(
     r"C:\Users\thano\Desktop\Literature Master Thesis"
     r"\Results\checkpoints_P1_matched_v3_gc"

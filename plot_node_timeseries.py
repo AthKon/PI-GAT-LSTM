@@ -55,6 +55,7 @@ Usage
     python plot_node_timeseries.py <dir> --max-windows 6
 """
 import argparse
+import os
 import pathlib
 import sys
 
@@ -66,7 +67,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-CACHE_DIR = pathlib.Path(r"C:\Users\thano\Desktop\data\cache_npy")
+CACHE_DIR = pathlib.Path(os.environ.get("MOORING_CACHE_DIR", r"C:\Users\thano\Desktop\data\cache_npy"))
 CONTACT_M = 0.01          # z below this = resting on the seabed
 TD_LO, TD_HI = 0.02, 0.98  # contact fraction bounds for "intermittent"
 

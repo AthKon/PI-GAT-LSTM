@@ -16,11 +16,17 @@ Sources
 Coverage: the abstract (plan Step 6.9). Extend section by section as drafting goes on
 -- add a build_* function and register it in MACRO_GROUPS.
 
+Inputs are found through paperA_paths.py: the development layout under Results/ by
+default, or the three unpacked 4TU.ResearchData archives when PAPERA_DATA is set
+(https://doi.org/10.4121/e3f167ac-2925-4815-956e-5ef3d883f1a5); see that module.
+
 Usage
   python paperA_numbers.py                # regenerate numbers.tex
   python paperA_numbers.py --check        # exit 1 if numbers.tex is out of date
   python paperA_numbers.py --allow-stale  # keep the recorded reachability figures if
                                           # the data drive (cache_npy) is not mounted
+  python paperA_numbers.py --write-derived  # development layout: also store the results
+                                          # that need non-deposited inputs in data/
 """
 import argparse
 import collections
@@ -36,8 +42,11 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 
+import paperA_paths as P
+from paperA_paths import derived, npload
+
 ROOT = pathlib.Path(__file__).parent
-OUT = ROOT / "paper_A_manuscript" / "numbers.tex"
+OUT = P.OUT_DIR / "numbers.tex"
 
 S1 = ROOT / "Results" / "checkpoints_P1_matched_v5"
 SF = ROOT / "Results" / "eval_v5_snapfix"
@@ -54,7 +63,7 @@ EVAL_CLEAN = ROOT / "Results" / "SR_RESULTS" / "checkpoints_P2_eval_clean"
 T1 = EVAL_CLEAN / "stage1"
 T2 = EVAL_CLEAN
 
-CACHE = pathlib.Path("C:/Users/thano/Desktop/data/cache_npy")
+CACHE = P.CACHE          # MOORING_CACHE_DIR, or the development default
 
 # Solver settings, read from the raw batch metadata (gnl_aout.dat) on 2026-09-15.
 # Identical in every case sampled across all ten sites. The raw batch directory is
@@ -99,7 +108,7 @@ _REACH = {}          # filled by build_snaps(); read by table_snapaccounting()
 
 # --------------------------------------------------------------------------- io
 def rows(path):
-    with open(path, newline="", encoding="utf-8") as f:
+    with P.open_(path, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
@@ -150,7 +159,7 @@ def build_scope():
     n_in_grid = sorted({int(r["N_in"]) for r in rows(T2 / "superres_grid.csv")})
     assert layouts == n_in_grid, (layouts, n_in_grid)
 
-    dump = np.load(T2 / "test_timeseries_dump.npz")
+    dump = npload(T2 / "test_timeseries_dump.npz")
     locs = sorted({int(m[0]) for m in dump["meta_all"]})
 
     return [
@@ -213,7 +222,7 @@ def build_stage1_calibration():
     whether the window contains a catalogued snap event. up = share of tail entries
     predicted low, bias = mean signed error (prediction minus truth).
     """
-    z = np.load(T1 / "test_timeseries_dump.npz")
+    z = npload(T1 / "test_timeseries_dump.npz")
     meta, pt, pp = z["meta_all"], z["peak_true_all"], z["peak_pred_all"]
     snap_keys = {(int(a), int(b), int(c), int(d)) for a, b, c, d, _t in z["snap_ev"]}
     is_snap = np.array([(int(m[0]), int(m[1]), int(m[2]), int(m[3])) in snap_keys
@@ -324,7 +333,7 @@ def build_full_sensing_anchor():
     mae_s1_own = float(per_n_s1[N_OUT]["MAE_tension"])
     gap_pct = 100 * abs(mae_s1_own - mae) / mae_s1_own
 
-    dump = np.load(T2 / "test_timeseries_dump.npz")
+    dump = npload(T2 / "test_timeseries_dump.npz")
     locs = np.array([int(m[0]) for m in dump["meta_all"]])
     ood = np.isin(locs, (10, 11))
 
@@ -364,26 +373,32 @@ def build_stage2_regions():
     return out
 
 
+@derived
+def snap_reachability():
+    """Reachable snap events per split (exact_split_accounting.py, reads the npy cache)."""
+    proc = subprocess.run([sys.executable, str(ROOT / "exact_split_accounting.py"),
+                           "--catalogue", str(P.src(SNAP_CAT)), "--mask", str(P.src(MASK_TRAIN))],
+                          capture_output=True, text=True, timeout=1800, cwd=ROOT)
+    block = proc.stdout.split("--- ALL catalogued events ---")[1].split("---")[0]
+    got = {}
+    for sp in ("train_val", "test_temporal", "test_ood", "TOTAL"):
+        m = re.search(sp + r"\s+(\d+)\s+(\d+)\s+\d+%\s+(\d+)\s+\d+%", block)
+        if not m:
+            raise RuntimeError(f"row {sp} not found")
+        got[sp] = tuple(int(m.group(j)) for j in (1, 2, 3))
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip()[-400:])
+    note = (f"exact_split_accounting.py (block-aware) --catalogue {SNAP_CAT.name} "
+            f"--mask {MASK_TRAIN.name}, TOTAL row")
+    return got, note
+
+
 def build_snaps(allow_stale=False):
     """Snap-event reachability under the two exclusion policies, and per-event capture."""
     split_rows = dict(STALE_REACH)
     note = "STALE -- cache_npy not mounted; re-run with the data drive attached"
     try:
-        proc = subprocess.run([sys.executable, str(ROOT / "exact_split_accounting.py"),
-                               "--catalogue", SNAP_CAT.name, "--mask", MASK_TRAIN.name],
-                              capture_output=True, text=True, timeout=1800, cwd=ROOT)
-        block = proc.stdout.split("--- ALL catalogued events ---")[1].split("---")[0]
-        got = {}
-        for sp in ("train_val", "test_temporal", "test_ood", "TOTAL"):
-            m = re.search(sp + r"\s+(\d+)\s+(\d+)\s+\d+%\s+(\d+)\s+\d+%", block)
-            if not m:
-                raise RuntimeError(f"row {sp} not found")
-            got[sp] = tuple(int(m.group(j)) for j in (1, 2, 3))
-        if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.strip()[-400:])
-        split_rows = got
-        note = (f"exact_split_accounting.py (block-aware) --catalogue {SNAP_CAT.name} "
-                f"--mask {MASK_TRAIN.name}, TOTAL row")
+        split_rows, note = snap_reachability()
     except Exception as exc:                                             # noqa: BLE001
         if not allow_stale:
             sys.exit(f"[numbers] exact_split_accounting.py failed: {exc}\n"
@@ -402,7 +417,7 @@ def build_snaps(allow_stale=False):
     after = 100.0 * reach["after"] / reach["present"]
 
     # Per-event snap capture on the clean draws: Stage 1, and Stage 2 by N_in.
-    z1 = np.load(T1 / "test_timeseries_dump.npz")
+    z1 = npload(T1 / "test_timeseries_dump.npz")
     cat = {(int(r["loc"]), int(r["case"]), int(r["t"]))
            for r in rows(SNAP_CAT)}
     miss = sum(1 for a, b, _, _, t in z1["snap_ev"]
@@ -410,7 +425,7 @@ def build_snaps(allow_stale=False):
     assert miss == 0, f"{miss} dump events absent from {SNAP_CAT.name} -- wrong version"
     cap1, n1 = per_event_capture(z1["snap_ev"], z1["snap_true"], z1["snap_pred"])
 
-    z2 = np.load(T2 / "test_timeseries_dump.npz")
+    z2 = npload(T2 / "test_timeseries_dump.npz")
     cap4, n4 = per_event_capture(z2["snap_ev"], z2["snap_true"], z2["snap_pred"], n_in=4)
     cap21, _ = per_event_capture(z2["snap_ev"], z2["snap_true"], z2["snap_pred"], n_in=N_OUT)
 
@@ -433,6 +448,7 @@ def build_snaps(allow_stale=False):
     ]
 
 
+@derived
 def build_campaign():
     """The simulation campaign: forcing ranges, record geometry, solver cost.
 
@@ -445,8 +461,8 @@ def build_campaign():
         for d in sorted(CACHE.iterdir()):
             cases = sorted(d.iterdir())
             for c in cases:
-                hs.append(float(np.load(c / "env.npy")[1]))
-            ref = np.load(cases[0] / "reference.npy", mmap_mode="r")
+                hs.append(float(npload(c / "env.npy")[1]))
+            ref = npload(cases[0] / "reference.npy", mmap_mode="r")
             l0.add(round(float(ref[0, 1] - ref[0, 0]) * 20))
         hs_lo, hs_hi = min(hs), max(hs)
         assert l0 == {75, 105}, l0
@@ -592,6 +608,7 @@ def build_curation():
 CAT_STUDY = ROOT / "cat_study"
 
 
+@derived
 def build_catenary():
     """Data 2.5: why no station may out-pull the fairlead at the same sample (rule C).
 
@@ -652,10 +669,10 @@ def build_catenary():
     res = []
     for (l, c), lst in bycase.items():
         p = CACHE / f"loc{l:02d}" / f"case_{c:04d}"
-        T = np.load(p / "tension.npy", mmap_mode="r")
-        x = np.load(p / "x_abs.npy", mmap_mode="r")
-        z = np.load(p / "z_abs.npy", mmap_mode="r")
-        m = np.full(21, mu * float(np.load(p / "reference.npy")[0, -1]) / 20)
+        T = npload(p / "tension.npy", mmap_mode="r")
+        x = npload(p / "x_abs.npy", mmap_mode="r")
+        z = npload(p / "z_abs.npy", mmap_mode="r")
+        m = np.full(21, mu * float(npload(p / "reference.npy")[0, -1]) / 20)
         m[[0, -1]] *= 0.5
         for o in lst:
             t = o[2]
@@ -686,7 +703,7 @@ def build_catenary():
         k = (int(p.parent.parent.name[3:]), int(p.parent.name[5:]))
         if k in drop or k[0] not in REPEAT_DEV:
             continue
-        n = int(np.load(p, mmap_mode="r").shape[0])
+        n = int(npload(p, mmap_mode="r").shape[0])
         for tag, bad in (("tr", bad_tr), ("ev", bad_ev)):
             n_tv[tag] += E.candidates(k[0], n, bad.get(k), True)["train_val"].size
     pool_share = 100.0 * (1 - n_tv["ev"] / n_tv["tr"])
@@ -822,7 +839,7 @@ def eval_dropped(lc, case, start):
 def perwindow_clean(sub, n_drop):
     """Per-window statistics of a shipped model on its clean test draw, and their source."""
     f_job = EVAL_CLEAN / sub / "test_per_window_stats.csv"
-    if f_job.exists():
+    if P.exists(f_job):
         out = rows(f_job)
         assert len(out) == 50000 - n_drop, (f_job, len(out))
         return out, f"EVAL_CLEAN job, {f_job.relative_to(ROOT)}"
@@ -1016,6 +1033,7 @@ def build_repeat():
 
 
 @functools.lru_cache(maxsize=None)
+@derived
 def pinball_exceedance():
     """Share of per-entry tension above the pinball threshold, by site (Method 3.5, Results 4.1.1).
 
@@ -1028,7 +1046,7 @@ def pinball_exceedance():
     of the threshold (Method 3.5 says 85th; asserted).
     """
     import json
-    cfg = json.loads((S1 / "config.json").read_text())
+    cfg = json.loads(P.read_text(S1 / "config.json"))
     thr, win = float(cfg["peak_pinball_thr_n"]), int(cfg["window_len"])
     mask, dropped = {}, set()
     for r in rows(MASK_TRAIN):
@@ -1044,7 +1062,7 @@ def pinball_exceedance():
             f = cdir / "tension.npy"
             if key in dropped or not f.exists():
                 continue
-            T = np.load(f, mmap_mode="r")
+            T = npload(f, mmap_mode="r")
             if T.shape[0] < win:
                 continue
             cut = int(0.7 * T.shape[0]) if loc in DEV_SITES else T.shape[0]
@@ -1070,7 +1088,7 @@ def build_sites():
     """Per-site transfer: the two withheld locations, as a fairlead-peak level offset."""
     out = []
     for tag, path in (("Sone", T1), ("Stwo", T2)):
-        z = np.load(path / "test_timeseries_dump.npz")
+        z = npload(path / "test_timeseries_dump.npz")
         by_loc = collections.defaultdict(list)
         for m, a, b in zip(z["meta_all"], z["peak_true_all"], z["peak_pred_all"]):
             if a > 0:
@@ -1114,8 +1132,8 @@ def build_architecture():
     import json
     import torch
 
-    c1 = json.loads((S1 / "config.json").read_text())
-    c2 = json.loads((S2 / "config.json").read_text())
+    c1 = json.loads(P.read_text(S1 / "config.json"))
+    c2 = json.loads(P.read_text(S2 / "config.json"))
 
     # The two runs share every architecture and optimiser setting; the query
     # decoder and the batch split are the only intended differences. Assert it
@@ -1139,7 +1157,7 @@ def build_architecture():
 
     counts = {}
     for tag, path in (("One", S1), ("Two", S2)):
-        ck = torch.load(path / "best_mooring_gat_lstm_seed_42.pt",
+        ck = torch.load(P.src(path / "best_mooring_gat_lstm_seed_42.pt"),
                         map_location="cpu", weights_only=False)
         sd = ck["model_state_dict"]
         counts[tag] = dict(
@@ -1291,7 +1309,7 @@ def build_architecture():
 # job 236311, so every surviving window carries the realisation it had there. Same file names.
 SN = T2
 HPO = ROOT / "Results" / "Results_Paper_HPO"
-TABLES_DIR = ROOT / "paper_A_manuscript" / "tables"
+TABLES_DIR = P.OUT_DIR / "tables"
 DEV_SITES = (1, 3, 4, 5, 6, 7, 8, 9)
 LAYOUTS = (4, 5, 6, 7, 8, 10, 12, 15, 18, 21)
 
@@ -1302,14 +1320,15 @@ def undermass(mae, bias):
 
 
 @functools.lru_cache(maxsize=None)
+@derived
 def site_geometry():
     """Water depth h0 and unstretched length L0 per site, from the npy cache."""
     geo = {}
     for d in sorted(CACHE.iterdir()):
         lc = int(d.name[3:])
         c0 = sorted(d.iterdir())[0]
-        h0 = float(np.load(c0 / "env.npy")[0])
-        ref = np.load(c0 / "reference.npy", mmap_mode="r")
+        h0 = float(npload(c0 / "env.npy")[0])
+        ref = npload(c0 / "reference.npy", mmap_mode="r")
         geo[lc] = (h0, round(float(ref[0, 1] - ref[0, 0]) * 20))
     return geo
 
@@ -1353,8 +1372,8 @@ def snap_stats(ev):
 @functools.lru_cache(maxsize=None)
 def snap_comparison():
     """Stage 1 on all its events, and the three models on the events common to both draws."""
-    ev1 = snap_events(np.load(T1 / "test_timeseries_dump.npz"))
-    z2 = np.load(T2 / "test_timeseries_dump.npz")
+    ev1 = snap_events(npload(T1 / "test_timeseries_dump.npz"))
+    z2 = npload(T2 / "test_timeseries_dump.npz")
     ev21, ev4 = snap_events(z2, N_OUT), snap_events(z2, 4)
     common = set(ev1) & set(ev4) & set(ev21)
     sub = lambda ev: {k: ev[k] for k in common}                          # noqa: E731
@@ -1389,9 +1408,9 @@ def site_rows():
     (noise job, clean level, N_in = 4) are kept only as the join-integrity control below.
     """
     geo = site_geometry()
-    z1 = np.load(T1 / "test_timeseries_dump.npz")
+    z1 = npload(T1 / "test_timeseries_dump.npz")
     m1, t1, p1 = z1["meta_all"], z1["peak_true_all"], z1["peak_pred_all"]
-    z2 = np.load(T2 / "test_timeseries_dump.npz")
+    z2 = npload(T2 / "test_timeseries_dump.npz")
     m2, t2, p2 = z2["meta_all"], z2["peak_true_all"], z2["peak_pred_all"]
 
     acc = collections.defaultdict(lambda: collections.defaultdict(float))
@@ -1449,6 +1468,7 @@ def site_rows():
 
 
 @functools.lru_cache(maxsize=None)
+@derived
 def gc_ablation():
     """Global-context readout off vs on: one-variable HPO bake-off, VALIDATION set.
 
@@ -1585,7 +1605,7 @@ def build_results_matched():
         ]
 
     # ---- extremes: fairlead-peak tail split with under-mass
-    ts = tail_split(np.load(T1 / "test_timeseries_dump.npz"))
+    ts = tail_split(npload(T1 / "test_timeseries_dump.npz"))
     for q, band in ((90, "Ninety"), (99, "NinetyNine")):
         for pop, tag in (("nonsnap", "NonSnap"), ("snap", "Snap"), ("all", "All")):
             out.append((f"sOne{tag}UM{band}", f"{ts[(q, pop)]['um']:,.0f}".replace(",", "\\,"),
@@ -1637,7 +1657,7 @@ def build_results_matched():
     # The snap's OWN station exists at matched resolution only when the layout has an
     # output station at the catalogued node; the other events are reported as not
     # available (Table 11). Availability depends only on snap_ev and the catalogue.
-    n_av, n_all = snap_station_availability(np.load(T1 / "test_timeseries_dump.npz"), stage2=False)
+    n_av, n_all = snap_station_availability(npload(T1 / "test_timeseries_dump.npz"), stage2=False)
     out += [("snapStationAvailSone", f"{n_av}",
              f"Stage-1 events whose layout has an output station at the snap (of {n_all})"),
             ("snapStationNASone", f"{n_all - n_av}",
@@ -1675,10 +1695,10 @@ def build_results_matched():
     # Stage 2 draws them paired), so the columns of Table 11 are not a controlled
     # comparison; the events common to both, paired, are what settles a stage difference.
     _sr = [T1 / "test_timeseries_dump.npz", T2 / "test_timeseries_dump.npz"]
-    if all(q.exists() for q in _sr):
-        e_one = own_station_events(np.load(_sr[0]))
-        e_full = own_station_events(np.load(_sr[1]), 21)
-        e_four = own_station_events(np.load(_sr[1]), 4)
+    if all(P.exists(q) for q in _sr):
+        e_one = own_station_events(npload(_sr[0]))
+        e_full = own_station_events(npload(_sr[1]), 21)
+        e_four = own_station_events(npload(_sr[1]), 4)
         for tag, ev in (("Sone", e_one), ("StwoFull", e_full), ("StwoFour", e_four)):
             c = _capture_summary([v[0] for v in ev.values()])
             out += [(f"snapStation{tag}", f"{c['median']:.3f}",
@@ -1759,6 +1779,7 @@ def site_group_sweep():
 
 
 @functools.lru_cache(maxsize=None)
+@derived
 def true_contact_regions():
     """Stage-2 per-station R2 by region with TRUE 21-station contact labels.
 
@@ -1768,7 +1789,7 @@ def true_contact_regions():
     and per layout), deduplicated on (loc, case, N_in, start).
     """
     import plot_tension_along_line as ALONG
-    z = np.load(T2 / "test_timeseries_dump.npz", allow_pickle=True)
+    z = npload(T2 / "test_timeseries_dump.npz", allow_pickle=True)
     res, seen = collections.defaultdict(list), set()
     for key in z.files:
         if not re.match(r"^(?:nc\d+_)?ty\d+_meta$", key):
@@ -1789,6 +1810,26 @@ def true_contact_regions():
                    "suspended" if frac[i] <= 0.02 else "touchdown")
             res[reg].append(1.0 - float(((t - pr[:, i]) ** 2).sum()) / sst)
     return len(seen), {k: (len(v), statistics.median(v)) for k, v in res.items()}
+
+
+@derived
+def checkpoint_dump(ep):
+    """The arrays Results 4.2.3 reads from one Stage-2 per-checkpoint test dump (the pinned
+    windows of the published draw); these dumps are not in the archives."""
+    z = npload(S2 / f"test_timeseries_dump_epoch{ep:04d}.npz")
+    return {k: z[k] for k in ("meta_all", "snap_ev", "peak_true_all", "peak_pred_all",
+                               "snap_true", "snap_pred")}
+
+
+@derived
+def four_sensor_station(stem):
+    """The touchdown station of one Fig. 8 window (paperA_figures.four_sensor_window): its
+    traces and seabed contact. The contact comes from the raw simulations."""
+    import paperA_figures
+    w = paperA_figures.four_sensor_window(stem)
+    i = w["stations"][1]
+    return dict(loc=w["loc"], hs=w["hs"], i=i, frac=w["frac"][i], true=w["true"][:, i],
+                pred=w["pred"][:, i], interp=w["interp"][:, i], inc=w["inc"][:, i])
 
 
 def build_results_sparse():
@@ -1850,7 +1891,7 @@ def build_results_sparse():
     out += [("srTenWinPct", f"{100 * ten_share:.0f}", "loc10 share of the test windows [%]"),
             ("srTenMAPEPct", f"{100 * ten_mape_share:.0f}",
              "loc10 share of the pooled decoder MAPE at N_in=21 [%]")]
-    z2 = np.load(T2 / "test_timeseries_dump.npz")
+    z2 = npload(T2 / "test_timeseries_dump.npz")
     m2, t2, p2 = z2["meta_all"], z2["peak_true_all"], z2["peak_pred_all"]
     # ---- query-position limit: output columns on / off the native 21-station grid
     col = {o: statistics.mean(d(i, "MAE_tension", o) for i in LAYOUTS) for o in LAYOUTS}
@@ -1885,23 +1926,23 @@ def build_results_sparse():
     _r2fmt = lambda v: f"{v:.2f}" if 0.0 <= v <= 1.0 else f"{v:.1f}"                           # noqa: E731
     for stem, tag in ((paperA_figures.FOUR_WINDOWS[0], ""),
                       (paperA_figures.FOUR_WINDOWS[1], "B")):
-        w = paperA_figures.four_sensor_window(stem)
-        i = w["stations"][1]                       # the touchdown station of that row
+        w = four_sensor_station(stem)
+        i = w["i"]                                 # the touchdown station of that row
         row = "b" if tag else "a"
         out += [(f"figFour{tag}Site", f"loc{w['loc']:02d}", f"Fig. 8 {row} row, site"),
                 (f"figFour{tag}Hs", f"{w['hs']:.1f}", "its Hs [m]"),
                 (f"figFour{tag}Station", f"{i}", "its touchdown station"),
-                (f"figFour{tag}TdPct", f"{100 * w['frac'][i]:.0f}", "share of the window on the seabed [%]"),
-                (f"figFour{tag}TdRsq", f"{r2f(w['true'][:, i], w['pred'][:, i]):.3f}", "decoder R2 there"),
-                (f"figFour{tag}TdMAE", f"{mae(w['true'][:, i], w['pred'][:, i]):.0f}", "decoder MAE there [N]"),
-                (f"figFour{tag}TdRsqInterp", _r2fmt(r2f(w['true'][:, i], w['interp'][:, i])),
+                (f"figFour{tag}TdPct", f"{100 * w['frac']:.0f}", "share of the window on the seabed [%]"),
+                (f"figFour{tag}TdRsq", f"{r2f(w['true'], w['pred']):.3f}", "decoder R2 there"),
+                (f"figFour{tag}TdMAE", f"{mae(w['true'], w['pred']):.0f}", "decoder MAE there [N]"),
+                (f"figFour{tag}TdRsqInterp", _r2fmt(r2f(w['true'], w['interp'])),
                  "R2 of the TRUE tension at the four sensed stations, interpolated to it"),
-                (f"figFour{tag}TdMAEInterp", f"{mae(w['true'][:, i], w['interp'][:, i]):.0f}",
+                (f"figFour{tag}TdMAEInterp", f"{mae(w['true'], w['interp']):.0f}",
                  "interpolated-truth MAE there [N]"),
                 (f"figFour{tag}TdArc", f"{i / 20:.2f}",
                  "its normalised arc length (sensors sit at 0, 1/3, 2/3, 1)"),
-                (f"figFour{tag}TdLifts", str(int(np.sum(np.diff((~w['inc'][:, i]).astype(np.int8)) == 1)
-                                                + (1 if not w['inc'][0, i] else 0))),
+                (f"figFour{tag}TdLifts", str(int(np.sum(np.diff((~w['inc']).astype(np.int8)) == 1)
+                                                + (1 if not w['inc'][0] else 0))),
                  "times that station leaves the seabed inside the window")]
 
     # ---- the tail: Stage-2 fairlead peaks split by snap membership
@@ -1930,8 +1971,7 @@ def build_results_sparse():
                  f"median decoder/baseline p{q} under-mass over the 100 cells")]
 
     # ---- the epoch-33 alternative, on the pinned windows of the per-checkpoint dumps
-    za = np.load(S2 / "test_timeseries_dump_epoch0033.npz")
-    zb = np.load(S2 / f"test_timeseries_dump_epoch{EP:04d}.npz")
+    za, zb = checkpoint_dump(33), checkpoint_dump(EP)
     assert (za["meta_all"] == zb["meta_all"]).all() and (za["snap_ev"] == zb["snap_ev"]).all()
     # The pinned windows are drawn from the PUBLISHED draw: keep those the evaluation mask
     # leaves, and snap rows of events that are in the evaluation catalogue. These dumps joined
@@ -1995,7 +2035,7 @@ def build_results_sparse():
 @functools.lru_cache(maxsize=None)
 def kv_config():
     import json
-    return json.loads((S2 / "config.json").read_text(encoding="utf-8"))
+    return json.loads(P.read_text(S2 / "config.json"))
 
 
 # ------------------------------------------------------------------ table bodies
@@ -2103,8 +2143,8 @@ def table_tails():
     s += _row(["{Tail}", "{Window}", "{$n$}", "{Share}", "{$u$}", "{Bias}", "{Under-mass}"])
     s += _row(["", "", "", "{[\\si{\\percent}]}", "{[\\si{\\percent}]}", "{[\\si{\\newton}]}",
                "{[\\si{\\newton}]}"])
-    for stage, z in (("Stage 1", np.load(T1 / "test_timeseries_dump.npz")),
-                     ("Stage 2", np.load(T2 / "test_timeseries_dump.npz"))):
+    for stage, z in (("Stage 1", npload(T1 / "test_timeseries_dump.npz")),
+                     ("Stage 2", npload(T2 / "test_timeseries_dump.npz"))):
         ts = tail_split(z)
         t90, t99 = ts[(90, "all")]["thr"], ts[(99, "all")]["thr"]
         s += "\\midrule\n"
@@ -2222,13 +2262,13 @@ def table_snapstation():
     cols = (("{Stage~1}", T1 / "test_timeseries_dump.npz", None),
             ("{$N_{\\mathrm{in}}=21$}", T2 / "test_timeseries_dump.npz", 21),
             ("{$N_{\\mathrm{in}}=4$}", T2 / "test_timeseries_dump.npz", 4))
-    have = all(p.exists() for _l, p, _n in cols)
-    evs = [own_station_events(np.load(p), n) for _l, p, n in cols] if have else None
+    have = all(P.exists(p) for _l, p, _n in cols)
+    evs = [own_station_events(npload(p), n) for _l, p, n in cols] if have else None
     # availability depends only on the event rows, which the job must reproduce exactly
     # (its in-job gate), so it is read from the published dumps until the job lands
     pub = (T1 / "test_timeseries_dump.npz", T2 / "test_timeseries_dump.npz",
            T2 / "test_timeseries_dump.npz")
-    avail = [snap_station_availability(np.load(p if have else q), stage2=(n is not None), n_in=n)
+    avail = [snap_station_availability(npload(p if have else q), stage2=(n is not None), n_in=n)
              for (_l, p, n), q in zip(cols, pub)]
     if have:
         assert [len(ev) for ev in evs] == [a for a, _t in avail], "own-station events != availability"
@@ -2324,6 +2364,7 @@ NOISE_INSTR = "_p050"      # grafe2024virtual Table 6: 0.05 m heave, 0.05 m/s ve
 
 
 @functools.lru_cache(maxsize=None)
+@derived
 def fairlead_motion():
     """Median temporal std of the fairlead's x and z over every finite cached simulation,
     after the forcing ramp, and the share of stations that never move.
@@ -2335,8 +2376,8 @@ def fairlead_motion():
     fx, fz, fvx, fvz, still, tot = [], [], [], [], 0, 0
     for d in sorted(CACHE.iterdir()):
         for c in sorted(d.iterdir()):
-            x = np.asarray(np.load(c / "x_abs.npy", mmap_mode="r")[ramp:], dtype=np.float64)
-            z = np.asarray(np.load(c / "z_abs.npy", mmap_mode="r")[ramp:], dtype=np.float64)
+            x = np.asarray(npload(c / "x_abs.npy", mmap_mode="r")[ramp:], dtype=np.float64)
+            z = np.asarray(npload(c / "z_abs.npy", mmap_mode="r")[ramp:], dtype=np.float64)
             if not (np.isfinite(x).all() and np.isfinite(z).all()):
                 continue
             sx, sz = x.std(0), z.std(0)
@@ -2386,7 +2427,7 @@ def noise_rows():
         d = {int(r["node_count"]): r for r in rows(SN / f"test_metrics_by_node_count{tag}.csv")}
         gb = rows(SN / f"superres_grid_baseline{tag}.csv")
         p = kv(SN / f"test_metrics{tag}.csv")
-        z = np.load(SN / f"test_timeseries_dump{tag}.npz")
+        z = npload(SN / f"test_timeseries_dump{tag}.npz")
         m, pt, pp = z["meta_all"], z["peak_true_all"], z["peak_pred_all"]
         dev = np.isin(m[:, 0], DEV_SITES)
         ts = tail_split(z)
@@ -2406,6 +2447,7 @@ def noise_rows():
 
 
 @functools.lru_cache(maxsize=None)
+@derived
 def noise_bands(tags=("", "_p010", NOISE_INSTR, "_p100")):
     """Where the noise-induced error sits in frequency, on the stored 'typical' windows.
 
@@ -2418,14 +2460,14 @@ def noise_bands(tags=("", "_p010", NOISE_INSTR, "_p100")):
     """
     from scipy.signal import butter, sosfiltfilt
     fs = 1.0 / SOLVER["dt"]
-    tp = [float(np.load(c / "env.npy")[2]) for d in sorted(CACHE.iterdir()) for c in sorted(d.iterdir())]
+    tp = [float(npload(c / "env.npy")[2]) for d in sorted(CACHE.iterdir()) for c in sorted(d.iterdir())]
     band = (1.0 / max(tp), 1.0 / min(tp))
     lp = butter(4, 1.0, btype="low", fs=fs, output="sos")
     bp = butter(4, band, btype="band", fs=fs, output="sos")
     skill = lambda t, p: float(np.abs(np.diff(p) - np.diff(t)).mean() / np.abs(np.diff(t)).mean())  # noqa: E731
     out, ref = {}, None
     for tag in tags:
-        z = np.load(SN / f"test_timeseries_dump{tag}.npz")
+        z = npload(SN / f"test_timeseries_dump{tag}.npz")
         stems, seen = [], set()
         for k in z.files:
             mm = re.match(r"^((?:nc\d+_)?ty\d+)_meta$", k)
@@ -2532,7 +2574,7 @@ def build_noise():
     # under-mass grows, because the error spreads. Two populations, two answers.
     fl_thr = R[""]["tail90"]["thr"]
     assert R[I]["tail90"]["thr"] == fl_thr                            # same truth, same threshold
-    z2 = np.load(T2 / "test_timeseries_dump.npz")
+    z2 = npload(T2 / "test_timeseries_dump.npz")
     assert abs(float(np.quantile(z2["peak_true_all"], 0.9)) - fl_thr) < 1e-6, "noise clean dump != S2 clean dump"
     st = {tag: kv(SN / f"test_metrics{tag}.csv") for tag in ("", I)}
     st_um = {tag: undermass(float(v["test_peak_tension_MAE_p90"]), float(v["test_peak_tension_bias_p90"]))
@@ -2655,8 +2697,8 @@ def residue_data():
         ss_hit = sum(float(r["ss_res"]) for r, h in zip(pub, hit) if h)
         ss_all = sum(float(r["ss_res"]) for r in pub)
         # fairlead peak: the published dump, and the clean dump of the job
-        zp = np.load(dump_pub / "test_timeseries_dump.npz")
-        zc = np.load(EVAL_CLEAN / sub / "test_timeseries_dump.npz")
+        zp = npload(dump_pub / "test_timeseries_dump.npz")
+        zc = npload(EVAL_CLEAN / sub / "test_timeseries_dump.npz")
         mp, tp_, pp_ = zp["meta_all"], zp["peak_true_all"], zp["peak_pred_all"]
         mc, tc, pc = zc["meta_all"], zc["peak_true_all"], zc["peak_pred_all"]
         out[tag] = dict(
@@ -2881,6 +2923,7 @@ def _test_pass(sub):
     return (t1 - t0) / 60.0, n
 
 
+@derived
 def build_compute():
     """Training and test wall-clock of both stages (Method 3.6)."""
     import json
@@ -2965,7 +3008,7 @@ def shipped_kendall(stage):
     """
     import torch
     path = {1: S1, 2: S2}[stage]
-    ck = torch.load(path / "best_mooring_gat_lstm_seed_42.pt", map_location="cpu",
+    ck = torch.load(P.src(path / "best_mooring_gat_lstm_seed_42.pt"), map_location="cpu",
                     weights_only=False)
     ep = int(ck["epoch"])
     lv = [float(v) for v in ck["criterion_state_dict"]["log_vars"]]
@@ -3019,6 +3062,204 @@ def table_kendall(stage):
     return t
 
 
+# ------------------------------------------------------------------ Appendix D: linear regression
+# Linear_Regression.ipynb, cluster job 885495 (CLAUDE.md 17.3): five least-squares models fitted on
+# Stage 1's exact training split and scored with Stage 1's metric code on its screened test draw.
+# The job's LR0-LR3 outputs are byte-identical to job 872463's (checked 2026-10-01).
+LR = ROOT / "Results" / "LR_baseline"
+LR_MODELS = ("LR0_static", "LR1_pointwise", "LR2_line", "LR3_lagged", "LR4_lagged40")
+LR_S1 = "Stage 1 (GAT+BiLSTM)"
+LR_GROUPS = (("Deeper training sites", (1, 3, 4, 5, 7, 8, 9)),
+             ("loc06, shallow training site", (6,)),
+             ("loc11, withheld site", (11,)),
+             ("loc10, shallow withheld site", (10,)))
+_LR = {}
+
+
+def _lr_data():
+    """Summary table, fit report, per-window MAE/S and per-group statistics, all cross-checked."""
+    if _LR:
+        return _LR
+    import json
+    summ = {r[""]: {m: float(v) for m, v in r.items() if m}
+            for r in rows(LR / "lr_vs_stage1.csv")}
+    fit = json.loads(P.read_text(LR / "fit_report.json"))
+
+    # the summary's columns are each model's own test_metrics.csv (Stage 1: Table 6's source)
+    cols = (("pooled R2", "test_global_R2_tension"), ("MAE [N]", "test_MAE_tension"),
+            ("MAPE [%]", "test_MAPE_tension"),
+            ("skill score S (lower = better)", "test_temporal_diff_skill_tension"),
+            ("station-peak MAE [N]", "test_peak_tension_MAE"),
+            ("station R2, grounded (median)", "test_contact_grounded_R2_median"),
+            ("station R2, touchdown (median)", "test_contact_touchdown_R2_median"),
+            ("station R2, suspended (median)", "test_contact_suspended_R2_median"))
+    for model, d in [(LR_S1, T1)] + [(m, LR / m) for m in LR_MODELS]:
+        tm = kv(d / "test_metrics.csv")
+        for row, key in cols:
+            a, b = summ[row][model], float(tm[key])
+            assert abs(a - b) <= 1e-9 * max(1.0, abs(b)), (model, row, a, b)
+
+    # per-window MAE and S of every model, on the identical screened test windows
+    pw = {}
+    for m, path in [("S1", T1 / "test_per_window_stats.csv")] + \
+                   [(m, LR / m / "test_per_window_stats.csv") for m in LR_MODELS]:
+        pw[m] = {(int(r["lc_id"]), int(r["case_id"]), int(r["n_in"]), int(r["start_idx"])):
+                 (float(r["mae"]), float(r["td_skill"])) for r in rows(path)}
+    keys = sorted(pw["S1"])
+    assert len(keys) == 49513 and all(set(d) == set(keys) for d in pw.values())
+    for m, model in [("S1", LR_S1)] + [(m, m) for m in LR_MODELS]:   # rows rebuild MAE and S
+        assert abs(np.mean([pw[m][k][0] for k in keys]) - summ["MAE [N]"][model]) < 1e-6, m
+        assert abs(np.mean([pw[m][k][1] for k in keys])
+                   - summ["skill score S (lower = better)"][model]) < 1e-9, m
+
+    # fairlead-peak MAPE per group from each model's dump (Eq. metrics_fairlead)
+    # the dumps list the same windows in different orders: align each to Stage 1's by window key
+    z1 = npload(T1 / "test_timeseries_dump.npz")
+    meta, peak_true = z1["meta_all"], z1["peak_true_all"]
+    peaks = {"S1": z1["peak_pred_all"]}
+    for m in LR_MODELS:
+        z = npload(LR / m / "test_timeseries_dump.npz")
+        pos = {tuple(r): i for i, r in enumerate(z["meta_all"].tolist())}
+        order = np.array([pos[tuple(r)] for r in meta.tolist()])
+        assert len(pos) == len(meta) and np.array_equal(z["peak_true_all"][order], peak_true), m
+        peaks[m] = z["peak_pred_all"][order]
+
+    def mape_peak(m, sites):
+        sel = np.isin(meta[:, 0], sites)
+        t, p = peak_true[sel], peaks[m][sel]
+        return 100.0 * float(np.mean(np.abs(p - t) / t))
+
+    for m, model in [("S1", LR_S1)] + [(m, m) for m in LR_MODELS]:
+        for row, sites in (("fairlead peak, training sites: mean |error| [%]", DEV_SITES),
+                           ("fairlead peak, loc10: mean |error| [%]", (10,)),
+                           ("fairlead peak, loc11: mean |error| [%]", (11,))):
+            assert abs(mape_peak(m, sites) - summ[row][model]) < 1e-6, (m, row)
+
+    groups = {}
+    for name, sites in LR_GROUPS:
+        ks = [k for k in keys if k[0] in sites]
+        g = dict(n=len(ks))
+        for m in pw:
+            g[m] = dict(mae=float(np.mean([pw[m][k][0] for k in ks])),
+                        S=float(np.mean([pw[m][k][1] for k in ks])),
+                        worse=100.0 * float(np.mean([pw[m][k][1] > 1.0 for k in ks])),
+                        mape_peak=mape_peak(m, sites))
+        groups[name] = g
+    assert sum(g["n"] for g in groups.values()) == len(keys)
+    _LR.update(summ=summ, fit=fit, pw=pw, keys=keys, groups=groups)
+    return _LR
+
+
+def build_linear():
+    """Appendix D: the linear ladder. Every number in its prose."""
+    d = _lr_data()
+    fit, fits, pw, keys = d["fit"], d["fit"]["fits"], d["pw"], d["keys"]
+    n_in = {m: sum(1 for _ in rows(LR / m / "coefficients.csv")) - 1 for m in LR_MODELS[1:]}
+    assert n_in == {"LR1_pointwise": 34, "LR2_line": 70, "LR3_lagged": 286, "LR4_lagged40": 1618}, n_in
+    assert n_in["LR1_pointwise"] == 12 + 22                   # the station's own node features
+    dt = SOLVER["dt"]
+    lag_short = max(fit["lags"]) * dt
+    lag_long = max(fit["lr4_lags"]) * dt
+    lag_min = min(abs(x) for x in fit["lags"]) * dt
+    assert (round(lag_short, 6), round(lag_long, 6), round(lag_min, 6)) == (5.0, 40.0, 0.1)
+    # LR4 = LR3's lags plus every second out to lag_long
+    assert {abs(x) for x in fit["lr4_lags"]} == {abs(x) for x in fit["lags"]} | set(range(10, 401, 10))
+    sub_pct = 100.0 * fit["lr3_windows"] / fit["train_windows"]
+    assert abs(sub_pct - 10.0) < 0.01 and fit["lr3_stride"] == fit["lr4_stride"] == 5
+    for m in LR_MODELS[1:]:                       # no ridge penalty lowered the validation error
+        assert fits[m]["ridge"] == 0.0, (m, fits[m]["ridge"])
+        scan = fits[m].get("lambda_scan")
+        if scan:
+            mse = [v for _, v in scan]
+            assert all(b > a for a, b in zip(mse, mse[1:])), m
+        tr, va = fits[m]["train"]["r2"], fits[m]["val"]["r2"]
+        assert abs(tr - va) < 1e-3, (m, tr, va)    # no overfitting
+    curve = fits["LR4_lagged40"]["memory_curve"]
+    rm = {c["span_s"]: c["val_rmse"] for c in curve}
+    assert curve[0]["inputs"] == n_in["LR3_lagged"] and curve[-1]["inputs"] == n_in["LR4_lagged40"]
+    gain = 100.0 * (rm[lag_short] - rm[lag_long]) / rm[lag_short]
+    win_mae = 100.0 * np.mean([pw["S1"][k][0] < pw["LR4_lagged40"][k][0] for k in keys])
+    win_s = sum(pw["S1"][k][1] < pw["LR4_lagged40"][k][1] for k in keys)
+    assert win_s == len(keys)          # the prose says "in every window"
+    for name in ("loc06, shallow training site", "loc10, shallow withheld site"):
+        for m in LR_MODELS[1:]:        # the prose says "in most windows" at both shallow sites
+            assert d["groups"][name][m]["worse"] > 50.0, (name, m)
+    for name in ("Deeper training sites", "loc11, withheld site"):
+        for m in LR_MODELS[1:]:        # ... and only there
+            assert d["groups"][name][m]["worse"] < 5.0, (name, m)
+    r2_const = d["summ"]["pooled R2"]["LR0_static"]
+    worse_else = max(d["groups"][name][m]["worse"] for name in ("Deeper training sites",
+                     "loc11, withheld site") for m in LR_MODELS[1:])
+    mae4, mae1 = d["summ"]["MAE [N]"]["LR4_lagged40"], d["summ"]["MAE [N]"][LR_S1]
+    s4, s1 = (d["summ"]["skill score S (lower = better)"][m] for m in ("LR4_lagged40", LR_S1))
+    return [
+        ("lrTrainWindows", f"{fit['train_windows']:,}".replace(",", "\\,"),
+         "fit_report.json train_windows (the Stage-1 training pool)"),
+        ("lrSubsetPct", f"{sub_pct:.0f}", f"LR3/LR4: {fit['lr3_windows']} of {fit['train_windows']} windows"),
+        ("lrStride", f"{fit['lr3_stride']}", "LR3/LR4 fitted on one sample in lr3_stride"),
+        ("lrTestWindows", f"{len(keys):,}".replace(",", "\\,"), "screened Stage-1 test draw"),
+        ("lrInOne", f"{n_in['LR1_pointwise']}", "LR1 inputs (coefficients.csv)"),
+        ("lrInTwo", f"{n_in['LR2_line']}", "LR2 inputs"),
+        ("lrInThree", f"{n_in['LR3_lagged']}", "LR3 inputs"),
+        ("lrInFour", f"{n_in['LR4_lagged40']}", "LR4 inputs"),
+        ("lrLagMin", f"{lag_min:.1f}", "shortest lag [s]"),
+        ("lrLagShort", f"{lag_short:.0f}", "LR3's longest lag [s]"),
+        ("lrLagLong", f"{lag_long:.0f}", "LR4's longest lag [s]"),
+        ("lrRsqConst", f"{r2_const:.3f}", "LR0 (static pretension held constant) pooled R2"),
+        ("lrWinMAE", f"{win_mae:.1f}", f"windows where Stage 1 has a lower MAE than LR4, of {len(keys)}"),
+        ("lrMemShort", f"{rm[lag_short]:.1f}", "LR4 memory curve: validation RMSE [N], lags to 5 s"),
+        ("lrMemLong", f"{rm[lag_long]:.1f}", "LR4 memory curve: validation RMSE [N], lags to 40 s"),
+        ("lrMemGain", f"{gain:.1f}", "relative fall of that RMSE from 5 s to 40 s [%]"),
+        ("lrWorseElseMax", f"{worse_else:.1f}",
+         "largest share of windows with S_w > 1 for LR1-LR4 at the deeper training sites and loc11 [%]"),
+        ("lrMAEFour", f"{mae4:.1f}", f"LR4 test MAE [N] (Stage 1: {mae1:.4f})"),
+        ("lrSFour", f"{s4:.2f}", "LR4 test S"),
+        ("lrSOne", f"{s1:.2f}", "Stage 1 test S, same table"),
+        ("lrMAERatio", f"{mae4 / mae1:.1f}", "LR4 MAE / Stage 1 MAE"),
+    ]
+
+
+def _lr_num(v, fmt):
+    s = format(v, fmt)
+    return "$-$" + s[1:] if s.startswith("-") else s
+
+
+def _lr_count(n):
+    return f"{n:,}".replace(",", "{,}")
+
+
+def table_linear():
+    """Appendix D table (trimmed 2026-10-02): Stage 1 against LR0-LR4 on the screened draw.
+    The full comparison per site group is in the data repository."""
+    d = _lr_data()
+    summ, groups = d["summ"], d["groups"]
+    models = [LR_S1] + list(LR_MODELS)
+    keys = ["S1"] + list(LR_MODELS)
+    s = "\\begin{tabular}{@{}l r r r r r r@{}}\n\\toprule\n"
+    s += _row(["", "Stage~1", "LR0", "LR1", "LR2", "LR3", "LR4"])
+    s += "\\midrule\n"
+    for label, row, fmt in (("Pooled $R^{2}$", "pooled R2", ".3f"),
+                            ("MAE [\\si{\\newton}]", "MAE [N]", ".1f"),
+                            ("$S$", "skill score S (lower = better)", ".2f")):
+        s += _row([label] + [_lr_num(summ[row][m], fmt) for m in models])
+    s += "\\addlinespace\n"
+    s += "\\multicolumn{7}{@{}l}{Median station $R^{2}_{i,w}$} \\\\\n"
+    for label, row in (("\\quad Grounded", "station R2, grounded (median)"),
+                       ("\\quad Touchdown", "station R2, touchdown (median)"),
+                       ("\\quad Suspended", "station R2, suspended (median)")):
+        s += _row([label] + [_lr_num(summ[row][m], ".2f") for m in models])
+    s += "\\addlinespace\n"
+    s += "\\multicolumn{7}{@{}l}{Windows with $S_{w} > 1$ [\\si{\\percent}]} \\\\\n"
+    for label, name in (("\\quad loc06", "loc06, shallow training site"),
+                        ("\\quad loc10", "loc10, shallow withheld site")):
+        g = groups[name]
+        # LR0 is a constant: S_w = 1 in every window by construction
+        s += _row([label] + ["--" if k == "LR0_static" else _lr_num(g[k]["worse"], ".0f")
+                             for k in keys])
+    s += "\\bottomrule\n\\end{tabular}\n"
+    return s
+
+
 TABLES = [
     ("data_splits.tex", table_splits),
     ("data_snapaccounting.tex", table_snapaccounting),
@@ -3032,6 +3273,7 @@ TABLES = [
     ("results_noise.tex", table_noise),
     ("appendix_kendall_s1.tex", functools.partial(table_kendall, 1)),
     ("appendix_kendall_s2.tex", functools.partial(table_kendall, 2)),
+    ("appendix_linear.tex", table_linear),
     # appendix_residue.tex and appendix_snapsens.tex are no longer written: Appendices D and G
     # were removed from the manuscript (user, 2026-09-24). table_residue/table_snapsens are kept.
 ]
@@ -3066,6 +3308,7 @@ MACRO_GROUPS = [
     ("Results 4.3 -- motion-measurement noise (levels of job 236311, clean draw of job 402698)", build_noise),
     ("Results 4.4 -- what the test-window screen removed (published vs screened draw)",
      build_residue),
+    ("Appendix D -- linear regression models versus Stage 1 (job 885495)", build_linear),
 ]
 
 HEADER = """%% =====================================================================
@@ -3100,7 +3343,14 @@ if __name__ == "__main__":
                     help="exit 1 if numbers.tex differs from a fresh render")
     ap.add_argument("--allow-stale", action="store_true",
                     help="keep the recorded reachability if cache_npy is unmounted")
+    ap.add_argument("--write-derived", action="store_true",
+                    help="development layout: store the results that need non-deposited "
+                         "inputs in data/derived_inputs.json (read back when PAPERA_DATA is set)")
     args = ap.parse_args()
+    if P.ARCHIVES is not None:
+        print(f"[numbers] reading the archives in {P.ARCHIVES}; results that need inputs not "
+              f"in them come from {P.rel_out(P.DERIVED_JSON)}"
+              + (" (recomputed: PAPERA_RECOMPUTE=1)" if P.RECOMPUTE else ""))
 
     text = render(args.allow_stale)
     tables = {name: TABLE_HEADER + fn() for name, fn in TABLES}
@@ -3114,10 +3364,17 @@ if __name__ == "__main__":
                      f"(numbers.tex {'stale' if old != text else 'ok'}; tables {stale or 'ok'})")
         print("[numbers] numbers.tex and tables are up to date")
     else:
+        OUT.parent.mkdir(parents=True, exist_ok=True)
         OUT.write_text(text, encoding="utf-8")
         TABLES_DIR.mkdir(exist_ok=True)
         for name, t in tables.items():
             (TABLES_DIR / name).write_text(t, encoding="utf-8")
-        print(f"[numbers] wrote {OUT.relative_to(ROOT)} -- "
+        print(f"[numbers] wrote {P.rel_out(OUT)} -- "
               f"{text.count(chr(92) + 'newcommand')} macros; {len(tables)} tables in "
-              f"{TABLES_DIR.relative_to(ROOT)}")
+              f"{P.rel_out(TABLES_DIR)}")
+    if args.write_derived:
+        keys = P.write_derived("Results of the @derived functions of paperA_numbers.py, computed "
+                               "in the development layout from the raw simulations and from "
+                               "training-side files that are not in the 4TU archives. "
+                               "Regenerate with: python paperA_numbers.py --write-derived")
+        print(f"[numbers] stored {len(keys)} derived results in {P.rel_out(P.DERIVED_JSON)}")

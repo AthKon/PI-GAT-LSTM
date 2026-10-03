@@ -101,13 +101,14 @@ peak RSS stays a few tens of MB. This is NOT a notebook run.
 """
 import argparse
 import csv
+import os
 import pathlib
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 
-CACHE = pathlib.Path(r"C:\Users\thano\Desktop\data\cache_npy")
+CACHE = pathlib.Path(os.environ.get("MOORING_CACHE_DIR", r"C:\Users\thano\Desktop\data\cache_npy"))
 LOCS = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 N_CASES = 300
 

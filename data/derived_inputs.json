@@ -1,0 +1,976 @@
+{
+ "note": "Results of the @derived functions of paperA_numbers.py, computed in the development layout from the raw simulations and from training-side files that are not in the 4TU archives. Regenerate with: python paperA_numbers.py --write-derived",
+ "values": {
+  "build_campaign[]": [
+   {
+    "__tuple__": [
+     "hsMin",
+     "0.4",
+     "cache env.npy col 1 over all 3000 cases, 0.4149998724460602 m"
+    ]
+   },
+   {
+    "__tuple__": [
+     "hsMax",
+     "8.4",
+     "same, 8.41476821899414 m"
+    ]
+   },
+   {
+    "__tuple__": [
+     "lineShort",
+     "75",
+     "cache reference.npy node spacing x 20, six sites"
+    ]
+   },
+   {
+    "__tuple__": [
+     "lineLong",
+     "105",
+     "same, four sites"
+    ]
+   },
+   {
+    "__tuple__": [
+     "simSeconds",
+     "1380",
+     "gnl_aout.dat simT"
+    ]
+   },
+   {
+    "__tuple__": [
+     "simMinutes",
+     "23",
+     "same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "recordSamples",
+     "13801",
+     "rows of gnl_data1.dat = tension.npy length"
+    ]
+   },
+   {
+    "__tuple__": [
+     "solverStep",
+     "0.1",
+     "gnl_aout.dat simDt -- the INTEGRATION step, NOT an export decimation"
+    ]
+   },
+   {
+    "__tuple__": [
+     "rampSeconds",
+     "30",
+     "gnl_aout.dat StartRamp"
+    ]
+   },
+   {
+    "__tuple__": [
+     "elemSize",
+     "0.75",
+     "L0/nx: 75/100 = 105/140 m"
+    ]
+   },
+   {
+    "__tuple__": [
+     "repeatSeconds",
+     "1206.4",
+     "2*pi/(wc/(nw-1)), wc=7.5 rad/s, nw=1441 = 1206.3715789784806 s; measured autocorrelation lag 12064 samples in 30/30 cases"
+    ]
+   },
+   {
+    "__tuple__": [
+     "solverHoursMed",
+     "37",
+     "gnl_aout.dat [TIM] Total Time, 30 cases sampled across all sites: 25.8-59.6 h"
+    ]
+   },
+   {
+    "__tuple__": [
+     "solverHoursMin",
+     "26",
+     "same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "solverHoursMax",
+     "60",
+     "same"
+    ]
+   }
+  ],
+  "build_catenary[]": [
+   {
+    "__tuple__": [
+     "wSub",
+     "240.5",
+     "(rho A - rho_w A) g = (28.23 - 1025.0 x 0.003619) x 9.81 = 240.54635025000002 N/m"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catCleanSims",
+     "2891",
+     "simulations where the shape and non-finite rules never fire (scan_cat.pkl)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catStaticSlope",
+     "239.3",
+     "least squares over them, per-case median (T_f - T_anchor) against median (z_f - z_anchor) = np.float64(239.3221706702993) N/m"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catStaticIcpt",
+     "98",
+     "same fit, minus the intercept = np.float64(97.91238632433017) N"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catStaticCorr",
+     "1.0000",
+     "correlation of the same = 0.9999745817618384"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catMarginMed",
+     "0.98",
+     "median over them of the per-case median of (T_f - T_a)/(w_s h)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catMarginPone",
+     "0.42",
+     "1st percentile over them of the per-case minimum of the same = 0.4182827848129424"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catCleanSamples",
+     "44",
+     "samples of those simulations with a station other than the fairlead above 1 kN and above the fairlead at the same sample (k = 1.0)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catCleanHitSims",
+     "17",
+     "simulations holding them"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catCleanTotalM",
+     "40",
+     "archived samples of those simulations, in millions = 39846977"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catFlagSamples",
+     "8756",
+     "the same count over the 96 shape/non-finite-flagged simulations in use (masked or not)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catFlagSims",
+     "96",
+     "flagged simulations still in use"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catCandBelow",
+     "65",
+     "snap candidates (no cat bound, snapcand.py) in clean simulations whose largest station/fairlead ratio at the sample is in [0.9, 1.0)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catCandAbove",
+     "1",
+     "same, ratio in [1.0, 1.1)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catMomBelow",
+     "1.5",
+     "median |axial momentum residual| at snap candidates with ratio < 1, all simulations, accelerations from second differences of the archived positions = 1548.0113277028654 N"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catMomAbove",
+     "15",
+     "same, ratio >= 1.5 = 14832.11480230722 N; bands 1.0-1.2/1.2-1.5/1.5-3/3+ = 3324/5843/11336/16321 N (monotone, asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catPoolShare",
+     "0.37",
+     "block-aware training/validation candidate windows lost when the evaluation mask replaces the training mask, 11069424 -> 11028801"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catEventsCleanOld",
+     "230",
+     "snap_catalogue.csv (bound 1.5, no rule C) events in shape-clean simulations"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catEventsCleanNew",
+     "213",
+     "snap_catalogue_cat.csv, the same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catDropSone",
+     "487",
+     "Stage-1 published test windows covering a catenary-rule sample (of 50000)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catDropSoneTen",
+     "354",
+     "of them at loc10"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catDropStwo",
+     "47",
+     "Stage-2 distinct published test windows covering one (of 5000; x10 layouts)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "catDropStwoTen",
+     "35",
+     "of them at loc10"
+    ]
+   }
+  ],
+  "build_compute[]": [
+   {
+    "__tuple__": [
+     "sOneTrainHours",
+     "7",
+     "6.579166666666667 min/epoch (checkpoint spacing ep20-ep32) x 62 epochs = 6.798472222222221 h"
+    ]
+   },
+   {
+    "__tuple__": [
+     "sTwoTrainHours",
+     "34",
+     "run 1: 25.7637037037037 min/epoch (ep5-ep50) x 53; run 2: 39822.4 s for epochs 54-78; total 33.81971604938271 h"
+    ]
+   },
+   {
+    "__tuple__": [
+     "sOneTestMin",
+     "10",
+     "Stage-1 screened test pass, 49513 windows, 10.216666666666667 min"
+    ]
+   },
+   {
+    "__tuple__": [
+     "sTwoTestMin",
+     "13",
+     "Stage-2 screened test pass, 49530 window-layout pairs, 13.283333333333333 min"
+    ]
+   },
+   {
+    "__tuple__": [
+     "sOneTestMs",
+     "12",
+     "12.380586916567367 ms per 100-s window, incl. loading and metrics"
+    ]
+   },
+   {
+    "__tuple__": [
+     "sTwoTestMs",
+     "16",
+     "16.091257823541287 ms per 100-s window, incl. loading and metrics; a 13.8-window record takes 0.22 s"
+    ]
+   }
+  ],
+  "checkpoint_dump[33]": {
+   "__dict__": [
+    [
+     "meta_all",
+     {
+      "__nd__": "a8"
+     }
+    ],
+    [
+     "snap_ev",
+     {
+      "__nd__": "a9"
+     }
+    ],
+    [
+     "peak_true_all",
+     {
+      "__nd__": "a10"
+     }
+    ],
+    [
+     "peak_pred_all",
+     {
+      "__nd__": "a11"
+     }
+    ],
+    [
+     "snap_true",
+     {
+      "__nd__": "a12"
+     }
+    ],
+    [
+     "snap_pred",
+     {
+      "__nd__": "a13"
+     }
+    ]
+   ]
+  },
+  "checkpoint_dump[76]": {
+   "__dict__": [
+    [
+     "meta_all",
+     {
+      "__nd__": "a14"
+     }
+    ],
+    [
+     "snap_ev",
+     {
+      "__nd__": "a15"
+     }
+    ],
+    [
+     "peak_true_all",
+     {
+      "__nd__": "a16"
+     }
+    ],
+    [
+     "peak_pred_all",
+     {
+      "__nd__": "a17"
+     }
+    ],
+    [
+     "snap_true",
+     {
+      "__nd__": "a18"
+     }
+    ],
+    [
+     "snap_pred",
+     {
+      "__nd__": "a19"
+     }
+    ]
+   ]
+  },
+  "fairlead_motion[]": {
+   "__dict__": [
+    [
+     "n",
+     2991
+    ],
+    [
+     "x",
+     {
+      "__np__": "<f8",
+      "v": 0.3512426878602694
+     }
+    ],
+    [
+     "z",
+     {
+      "__np__": "<f8",
+      "v": 0.32587726087944086
+     }
+    ],
+    [
+     "vx",
+     {
+      "__np__": "<f8",
+      "v": 0.34336465057371435
+     }
+    ],
+    [
+     "vz",
+     {
+      "__np__": "<f8",
+      "v": 0.326676085496963
+     }
+    ],
+    [
+     "still",
+     44.31548614096257
+    ]
+   ]
+  },
+  "four_sensor_station[\"site10_n04_cl21\"]": {
+   "__dict__": [
+    [
+     "loc",
+     10
+    ],
+    [
+     "hs",
+     4.0040283203125
+    ],
+    [
+     "i",
+     16
+    ],
+    [
+     "frac",
+     {
+      "__np__": "<f8",
+      "v": 0.806
+     }
+    ],
+    [
+     "true",
+     {
+      "__nd__": "a0"
+     }
+    ],
+    [
+     "pred",
+     {
+      "__nd__": "a1"
+     }
+    ],
+    [
+     "interp",
+     {
+      "__nd__": "a2"
+     }
+    ],
+    [
+     "inc",
+     {
+      "__nd__": "a3"
+     }
+    ]
+   ]
+  },
+  "four_sensor_station[\"site11_n04_cl17\"]": {
+   "__dict__": [
+    [
+     "loc",
+     11
+    ],
+    [
+     "hs",
+     3.1800286769866943
+    ],
+    [
+     "i",
+     12
+    ],
+    [
+     "frac",
+     {
+      "__np__": "<f8",
+      "v": 0.826
+     }
+    ],
+    [
+     "true",
+     {
+      "__nd__": "a4"
+     }
+    ],
+    [
+     "pred",
+     {
+      "__nd__": "a5"
+     }
+    ],
+    [
+     "interp",
+     {
+      "__nd__": "a6"
+     }
+    ],
+    [
+     "inc",
+     {
+      "__nd__": "a7"
+     }
+    ]
+   ]
+  },
+  "gc_ablation[]": {
+   "__dict__": [
+    [
+     "GCoff",
+     {
+      "__dict__": [
+       [
+        "contact_grounded_R2_median",
+        -0.03431843519210816
+       ],
+       [
+        "contact_grounded_R2_fracneg",
+        59.86667533818938
+       ],
+       [
+        "contact_touchdown_R2_median",
+        0.9696233212947846
+       ],
+       [
+        "contact_suspended_R2_median",
+        0.9538270950317382
+       ],
+       [
+        "global_R2_tension",
+        0.9953332932462526
+       ],
+       [
+        "MAE_tension",
+        93.49576165576934
+       ],
+       [
+        "temporal_diff_skill_tension",
+        0.4425081371739727
+       ]
+      ]
+     }
+    ],
+    [
+     "GCon",
+     {
+      "__dict__": [
+       [
+        "contact_grounded_R2_median",
+        0.9745203167200088
+       ],
+       [
+        "contact_grounded_R2_fracneg",
+        1.2278876170655566
+       ],
+       [
+        "contact_touchdown_R2_median",
+        0.9826839625835418
+       ],
+       [
+        "contact_suspended_R2_median",
+        0.9628180146217347
+       ],
+       [
+        "global_R2_tension",
+        0.999403508192976
+       ],
+       [
+        "MAE_tension",
+        43.40755210796356
+       ],
+       [
+        "temporal_diff_skill_tension",
+        0.2699262531584621
+       ]
+      ]
+     }
+    ]
+   ]
+  },
+  "noise_bands[]": {
+   "__tuple__": [
+    {
+     "__tuple__": [
+      0.05626668292209671,
+      0.3621731438633285
+     ]
+    },
+    {
+     "__dict__": [
+      [
+       "",
+       {
+        "__dict__": [
+         [
+          "win",
+          32
+         ],
+         [
+          "series",
+          672
+         ],
+         [
+          "S",
+          0.2946655042596502
+         ],
+         [
+          "S_lp",
+          0.3010123987054667
+         ],
+         [
+          "hf",
+          1.1523306538640752
+         ],
+         [
+          "corr",
+          0.9990925916983757
+         ]
+        ]
+       }
+      ],
+      [
+       "_p010",
+       {
+        "__dict__": [
+         [
+          "win",
+          32
+         ],
+         [
+          "series",
+          672
+         ],
+         [
+          "S",
+          0.6968725854860103
+         ],
+         [
+          "S_lp",
+          0.38617557830720406
+         ],
+         [
+          "hf",
+          8.460715016844853
+         ],
+         [
+          "corr",
+          0.9935760572619731
+         ]
+        ]
+       }
+      ],
+      [
+       "_p050",
+       {
+        "__dict__": [
+         [
+          "win",
+          32
+         ],
+         [
+          "series",
+          672
+         ],
+         [
+          "S",
+          3.9611909052137713
+         ],
+         [
+          "S_lp",
+          1.1962199720084148
+         ],
+         [
+          "hf",
+          57.96263353398719
+         ],
+         [
+          "corr",
+          0.8558918638187027
+         ]
+        ]
+       }
+      ],
+      [
+       "_p100",
+       {
+        "__dict__": [
+         [
+          "win",
+          32
+         ],
+         [
+          "series",
+          672
+         ],
+         [
+          "S",
+          6.13629313024418
+         ],
+         [
+          "S_lp",
+          1.6188064576587777
+         ],
+         [
+          "hf",
+          101.27372477388249
+         ],
+         [
+          "corr",
+          0.783116524237159
+         ]
+        ]
+       }
+      ]
+     ]
+    }
+   ]
+  },
+  "pinball_exceedance[]": {
+   "__dict__": [
+    [
+     "thr",
+     5750.0
+    ],
+    [
+     "site",
+     {
+      "__dict__": [
+       [
+        1,
+        11.168447539995912
+       ],
+       [
+        3,
+        19.368193613465174
+       ],
+       [
+        4,
+        23.95488584512785
+       ],
+       [
+        5,
+        18.728624030309504
+       ],
+       [
+        6,
+        0.029901598648540417
+       ],
+       [
+        7,
+        19.44758617647984
+       ],
+       [
+        8,
+        11.327286463883778
+       ],
+       [
+        9,
+        16.354321923977558
+       ],
+       [
+        10,
+        0.10501086499180043
+       ]
+      ]
+     }
+    ],
+    [
+     "pooled",
+     15.019499524252991
+    ],
+    [
+     "n",
+     483440769
+    ]
+   ]
+  },
+  "site_geometry[]": {
+   "__dict__": [
+    [
+     1,
+     {
+      "__tuple__": [
+       30.096221923828125,
+       75
+      ]
+     }
+    ],
+    [
+     3,
+     {
+      "__tuple__": [
+       35.66230773925781,
+       75
+      ]
+     }
+    ],
+    [
+     4,
+     {
+      "__tuple__": [
+       44.66901397705078,
+       105
+      ]
+     }
+    ],
+    [
+     5,
+     {
+      "__tuple__": [
+       39.195098876953125,
+       105
+      ]
+     }
+    ],
+    [
+     6,
+     {
+      "__tuple__": [
+       14.459494590759277,
+       75
+      ]
+     }
+    ],
+    [
+     7,
+     {
+      "__tuple__": [
+       40.72367477416992,
+       105
+      ]
+     }
+    ],
+    [
+     8,
+     {
+      "__tuple__": [
+       30.16303253173828,
+       75
+      ]
+     }
+    ],
+    [
+     9,
+     {
+      "__tuple__": [
+       33.577667236328125,
+       75
+      ]
+     }
+    ],
+    [
+     10,
+     {
+      "__tuple__": [
+       14.997584342956543,
+       75
+      ]
+     }
+    ],
+    [
+     11,
+     {
+      "__tuple__": [
+       38.6137809753418,
+       105
+      ]
+     }
+    ]
+   ]
+  },
+  "snap_reachability[]": {
+   "__tuple__": [
+    {
+     "__dict__": [
+      [
+       "train_val",
+       {
+        "__tuple__": [
+         517,
+         124,
+         381
+        ]
+       }
+      ],
+      [
+       "test_temporal",
+       {
+        "__tuple__": [
+         194,
+         46,
+         152
+        ]
+       }
+      ],
+      [
+       "test_ood",
+       {
+        "__tuple__": [
+         191,
+         43,
+         121
+        ]
+       }
+      ],
+      [
+       "TOTAL",
+       {
+        "__tuple__": [
+         902,
+         213,
+         654
+        ]
+       }
+      ]
+     ]
+    },
+    "exact_split_accounting.py (block-aware) --catalogue snap_catalogue_cat.csv --mask artifact_samples.csv, TOTAL row"
+   ]
+  },
+  "true_contact_regions[]": {
+   "__tuple__": [
+    32,
+    {
+     "__dict__": [
+      [
+       "grounded",
+       {
+        "__tuple__": [
+         434,
+         0.9931567472123064
+        ]
+       }
+      ],
+      [
+       "suspended",
+       {
+        "__tuple__": [
+         215,
+         0.957149651461961
+        ]
+       }
+      ],
+      [
+       "touchdown",
+       {
+        "__tuple__": [
+         23,
+         0.9955430619007108
+        ]
+       }
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}
