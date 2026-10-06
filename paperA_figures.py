@@ -759,7 +759,7 @@ def fig_grid(png_dir):
     save(fig, "fig_grid", png_dir)
 
 
-# ------------------------------------------------------------------ Appendix D (linear regression)
+# ------------------------------------------------------------------ Appendix E (linear regression)
 # Stage 1 against LR4, the longest-memory linear model of Linear_Regression.ipynb (cluster job
 # 885495), in one Stage-1 test window at the shallow withheld site loc10 (user, 2026-10-02: one
 # row only; further windows go to the data repository). The window is chosen on the ground truth

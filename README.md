@@ -8,7 +8,7 @@ Oriol Colomés (Delft University of Technology), in preparation for submission t
 |---|---|
 | Trained models, input normalisers, logs and evaluation outputs | 4TU.ResearchData, https://doi.org/10.4121/e3f167ac-2925-4815-956e-5ef3d883f1a5 (CC BY 4.0) |
 | Code (this repository) | MIT licence |
-| Code version used for the deposited files | release **v1.0** of this repository |
+| Code version used for the deposited files | release **v1.1** of this repository (v1.0 plus the threshold study of Appendix B; the deposited files are unchanged) |
 | Contact | Athanasios Konstantaras, thanoskonstantaras@gmail.com |
 
 The repository holds the notebooks that trained and evaluated the models, the scripts that turn
@@ -204,7 +204,7 @@ For a window of W samples at N sensed stations, ordered from the anchor (0) to t
 
 `model(graph, x_seq, edge_seq, query_graph)` returns standardised tension of shape [W, N_out, 1],
 with N_out = N for Stage 1 and 21 for Stage 2, over the same window. The channel lists and their
-units are in Appendix A of the manuscript. The dataset class `MooringSequenceDatasetPositionTension`
+units are in Appendix C of the manuscript. The dataset class `MooringSequenceDatasetPositionTension`
 of the notebook builds all of them from the x and z positions of a simulation and the static line
 description.
 
@@ -270,19 +270,19 @@ manuscript's, in about 30 seconds.
 **What comes from where.** Almost every result is computed from the archives and `data/`. A few
 need inputs that are not deposited: the raw simulations (site depths and line lengths, sea-state
 ranges, fairlead motion statistics, the share of tension samples above the pinball threshold, snap
-reachability, the catenary-condition study of Section 2.5, the true seabed contact behind the
+reachability, the catenary-condition and threshold studies of Section 2.5 and Appendix B, the true seabed contact behind the
 Figure 8 values of Section 4.2.2 and a true-contact check of the regional R²), the training logs of
 the global-context ablation, two Stage 2 per-checkpoint test dumps (a comparison of epochs 33 and
 76), and the file times behind the compute times of Section 3.6. These were computed in
 the development tree and stored in `data/derived_inputs.json` and `data/derived_inputs_arrays.npz`
 (`python paperA_numbers.py --write-derived`). With `PAPERA_DATA` set they are read from there;
-three macro groups come from them entirely (the simulation campaign, 14 macros; the catenary
-condition, 23; compute times, 6). With the raw simulations available, `PAPERA_RECOMPUTE=1`
+four macro groups come from them entirely (the simulation campaign, 14 macros; the catenary
+condition, 23; the threshold values, 34; compute times, 6). With the raw simulations available, `PAPERA_RECOMPUTE=1`
 recomputes the ones that read them.
 
 **Figures.** Figures 5, 6, 7, 9 and 10 (`fig_peaks`, `fig_snaptraces`, `fig_sweep`,
 `fig_snaptraces_s2`, `fig_noise`) are drawn from the archives and come out identical to the
-manuscript's, as does `fig_grid` (the full 10 x 10 layout grid, not in the manuscript). Figures 4, 8 and D.1 (`fig_alongline`, `fig_foursensor`, `fig_linear`) read
+manuscript's, as does `fig_grid` (the full 10 x 10 layout grid, not in the manuscript). Figures 4, 8 and E.1 (`fig_alongline`, `fig_foursensor`, `fig_linear`) read
 the true seabed contact from the raw simulations; without `MOORING_CACHE_DIR` they are skipped with
 a message.
 

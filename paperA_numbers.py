@@ -789,6 +789,309 @@ def build_catenary():
 
 
 # ---------------------------------------------------------------------------------
+# Appendix B: the coherence and isolation bounds of the two rules of Data 2.5.
+SHAPE_DEF = dict(Tt=10_000.0, it=10.0, ct=3.0, fm=3.0)       # T > Tt, iso > it, coh > ct or fair > fm
+
+
+def _snap_variant_events(A, c, isomin=3.0, cohmax=3.0):
+    """The snap catalogue rebuilt from the relaxed candidate table of cat_study/snap_sens.pkl.
+
+    Same rule as scan_snap_events.py (guard D, k = 1.0): 20-sample refractory groups per
+    simulation from the first passing timestep, the strongest member kept. A copy of
+    cat_study/snap_sens_out.py events(); the baseline reproduces snap_catalogue_cat.csv.
+    """
+    T = A[:, c["T"]]
+    m = ((T > 3000.0) & (A[:, c["iso"]] > isomin) & (A[:, c["coh"]] < cohmax)
+         & (A[:, c["r10"]] < 0.25) & (A[:, c["rmax"]] <= 1.0))
+    key = A[:, c["loc"]].astype(int) * 10000 + A[:, c["case"]].astype(int)
+    t = A[:, c["t"]].astype(int)
+    tp = {}
+    for i in np.where(m)[0]:
+        kk = (int(key[i]), int(t[i]))
+        tp[kk] = max(tp.get(kk, 0.0), float(T[i]))
+    groups, cur, cur_k, last = [], [], None, -99
+    for (k_, t_) in sorted(tp):
+        if k_ != cur_k:
+            if cur:
+                groups.append((cur_k, cur))
+                cur = []
+            cur_k, last = k_, -99
+        if t_ - last < 20:
+            cur.append(t_)
+            continue
+        if cur:
+            groups.append((cur_k, cur))
+        cur, last = [t_], t_
+    if cur:
+        groups.append((cur_k, cur))
+    return [(k_ // 10000, k_ % 10000, max(g, key=lambda u: tp[(k_, u)])) for k_, g in groups]
+
+
+@derived
+def build_thresholds():
+    """Appendix B: what the coherence and isolation bounds of the shape and snap rules rest on.
+
+    Reads cat_study/threshold_scan.pkl (python threshold_scan.py in cat_study/, ~5 min), the snap
+    candidate table cat_study/snap_sens.pkl + snap_sens_out.csv (snap_sens_scan.py, snap_sens_out.py)
+    and the Stage-1 screened dump. Every claim of the two new paragraphs is asserted here.
+      coherence: Eq. axial_balance over ONE segment leaves only the segment weight, so no station
+        other than the fairlead exceeds its more heavily loaded neighbour; in the simulations no rule
+        touches, coh never reaches 1.25 above 10 kN; higher ratios occur only where the rules fire.
+      isolation: a rise from slack to a held tension gives iso <= 2; wave crests stay far below 3; the
+        catalogue depends on the snap bound but the non-snap tail does not; iso > 10 does NOT separate
+        snaps from artifacts (coherence does) and only confines the shape rule to one-sample spikes.
+    """
+    pk = CAT_STUDY / "threshold_scan.pkl"
+    for f in (pk, CAT_STUDY / "snap_sens.pkl"):
+        if not f.exists():
+            sys.exit(f"[numbers] cat_study/{f.name} missing -- run the scan of that name in cat_study/")
+    D = pickle.loads(pk.read_bytes())
+    S = pickle.loads((CAT_STUDY / "snap_sens.pkl").read_bytes())
+    R = _snapsens_rows()
+    rc = {k: i for i, k in enumerate(D["row_cols"])}
+
+    # 0. the clean class of the scan is the reference set of the 50 kN ceiling (build_curation)
+    ev_mask = rows(MASK_EVAL)
+    fair_viol = {(int(r["loc"]), int(r["case"])) for r in ev_mask if int(r["n_catenary"]) > 0}
+    ref = {(int(r["loc"]), int(r["case"])) for r in rows(ROOT / "ceiling_derivation.csv")
+           if int(r["n_shape"]) == 0 and int(r["n_nonfinite"]) == 0
+           and (int(r["loc"]), int(r["case"])) not in fair_viol}
+    clean = {k for k, v in D["cases"].items() if v["clean"]}
+    assert clean == ref and len(clean) == D["n_clean"], (len(clean), len(ref))
+
+    # 1. coherence above 10 kN: the segment weight, and what the clean simulations reach
+    seg_w = W_SUB * SOLVER["elem_m"] * SOLVER["nx_long"] / 20.0          # longest line, 105 m
+
+    def hist_q(h, q):
+        cum = np.cumsum(h)
+        return int(np.searchsorted(cum, q * cum[-1]))
+    dT_med, dT_p99 = hist_q(D["h_dT"], 0.5), hist_q(D["h_dT"], 0.99)
+    res_med, res_p99 = hist_q(D["h_res"], 0.5), hist_q(D["h_res"], 0.99)
+    assert abs(dT_med - seg_w) < 0.05 * seg_w and res_med < 0.01 * dT_med, (dT_med, seg_w, res_med)
+    n10 = int(D["clean_n10_by_station"].sum())
+    cmax = float(D["clean_coh_max"])
+    hi = D["clean_hi_by_station"]
+    assert cmax < 1.25 and hi[:-1].sum() == 0 and hi[-1] > 0, (cmax, hi)
+    H = D["hicoh"]
+    assert len(H) and not H[:, rc["clean"]].any()                       # coh > 1.25: flagged only
+    bands = [(1.25, 1.5), (1.5, 2), (2, 3), (3, 5), (5, 10), (10, np.inf)]
+    band_res = [float(np.nanmedian(H[(H[:, rc["coh"]] > a) & (H[:, rc["coh"]] <= b), rc["res"]]))
+                for a, b in bands]
+    assert min(band_res) == band_res[0], band_res
+    E = D["events"]
+    ec = {k: i for i, k in enumerate(D["events_cols"])}
+    assert len(E) == len(rows(SNAP_CAT))
+    ev_res = float(np.median(E[:, ec["res"]]))
+    ev_coh = float(np.median(E[:, ec["coh"]]))
+    ev_coh_max = float(E[:, ec["coh"]].max())
+    assert ev_coh_max < 3.0
+
+    # 2. the mask under other bounds, rebuilt from the candidate table (superset of every variant)
+    C = D["cand"]
+    cc = {k: i for i, k in enumerate(D["cand_cols"])}
+    byc = collections.defaultdict(list)
+    for j, (l, cs) in enumerate(zip(C[:, cc["loc"]].astype(int), C[:, cc["case"]].astype(int))):
+        byc[(l, cs)].append(j)
+    byc = {k: np.array(v) for k, v in byc.items()}
+    pub = {}
+    for k, v in D["cases"].items():
+        pub[k] = set(v["shape_t"].tolist()) | set(v["ceil_t"].tolist()) | set(v["nf_t"].tolist())
+    pub_sims = {k for k, s in pub.items() if s}
+    assert sum(len(s) for s in pub.values()) == sum(int(r["n_bad"]) for r in rows(MASK_TRAIN))
+    assert len(pub_sims) == len(rows(MASK_TRAIN))
+
+    eval_mask = _mask_by_case(MASK_EVAL)
+    def mask_variant(**kw):
+        p = dict(SHAPE_DEF, **kw)
+        added = removed = in_eval = 0
+        sims, new_sims = 0, set()
+        for k, v in D["cases"].items():
+            s = set()
+            if k in byc:
+                ix = byc[k]
+                m = ((C[ix, cc["T"]] > p["Tt"]) & (C[ix, cc["iso"]] > p["it"])
+                     & ((C[ix, cc["coh"]] > p["ct"]) | (C[ix, cc["fair"]] > p["fm"])))
+                s = set(C[ix, cc["t"]][m].astype(int).tolist())
+            nf = set(v["nf_t"].tolist())        # rows holding a non-finite value: masked anyway
+            if not kw:                          # the candidate table suffices for the shape rule
+                assert s | nf == set(v["shape_t"].tolist()) | nf, k
+            u = s | set(v["ceil_t"].tolist()) | nf
+            added += len(u - pub[k])
+            in_eval += len((u - pub[k]) & eval_mask.get(k, set()))
+            removed += len(pub[k] - u)
+            sims += bool(u)
+            if u and k not in pub_sims:
+                new_sims.add(k)
+        return dict(added=added, removed=removed, sims=sims, new=len(new_sims), in_eval=in_eval)
+    base = mask_variant()
+    assert base["added"] == base["removed"] == base["new"] == 0 and base["sims"] == len(pub_sims)
+    coh_v = {v: mask_variant(ct=v) for v in (1.5, 2.0, 2.5, 4.0, 5.0, 7.0, 10.0)}
+    iso_v = {v: mask_variant(it=v) for v in (7.0, 15.0)}
+    assert all(r["new"] == 0 for r in coh_v.values()) and all(r["new"] == 0 for r in iso_v.values())
+    coh_mask_max = max(max(r["added"], r["removed"]) for r in coh_v.values())
+    iso_mask_max = max(max(r["added"], r["removed"]) for r in iso_v.values())
+    no_fair = mask_variant(fm=np.inf)
+    assert no_fair["added"] == 0 and no_fair["removed"] > 0
+    floor_v = mask_variant(Tt=7500.0)                                      # the 10 kN floor lowered
+    assert floor_v["removed"] == 0 and floor_v["in_eval"] > 0.8 * floor_v["added"], floor_v
+
+    # 3. the non-snap fairlead tail of Stage 1 (Results 4.1.3) under other snap-rule bounds
+    A = S["table"]
+    sc = {k: i for i, k in enumerate(S["cols"])}
+    z = npload(T1 / "test_timeseries_dump.npz")
+    meta, pt, pp = z["meta_all"], z["peak_true_all"], z["peak_pred_all"]
+    bym = collections.defaultdict(list)
+    for j, m in enumerate(meta):
+        bym[(int(m[0]), int(m[1]))].append((int(m[3]), j))
+
+    def nonsnap_tail(ev):
+        by_case = collections.defaultdict(list)
+        for l, cs, tt in ev:
+            by_case[(l, cs)].append(tt)
+        is_snap = np.zeros(len(meta), bool)
+        for k, ts in by_case.items():
+            for st, j in bym.get(k, []):
+                if any(st <= tt < st + REPEAT_W for tt in ts):
+                    is_snap[j] = True
+        out = {}
+        for q in (0.90, 0.99):
+            sel = (pt >= float(np.quantile(pt, q))) & ~is_snap
+            s = (pp - pt)[sel]
+            out[q] = (100.0 * float((s < 0).mean()), float(s.mean()))
+        return is_snap, out
+    ev0 = _snap_variant_events(A, sc)
+    assert len(ev0) == len(rows(SNAP_CAT)), len(ev0)
+    keys = {(int(a), int(b), int(c_), int(d)) for a, b, c_, d, _t in z["snap_ev"]}
+    snap0, tail0 = nonsnap_tail(ev0)
+    assert (snap0 == np.array([(int(m[0]), int(m[1]), int(m[2]), int(m[3])) in keys
+                               for m in meta])).all()
+    iso_tail = {v: nonsnap_tail(_snap_variant_events(A, sc, isomin=v))[1] for v in (2.0, 2.5, 3.0, 4.0)}
+    coh_tail = {v: nonsnap_tail(_snap_variant_events(A, sc, cohmax=v))[1] for v in (1.5, 2.0, 5.0, 8.0)}
+    fmt_up = lambda x: f"{x:.1f}"                                           # noqa: E731
+    fmt_b = lambda x: f"{x:+.0f}"                                           # noqa: E731
+    for tl in coh_tail.values():                                          # unchanged as reported
+        for q in (0.90, 0.99):
+            assert (fmt_up(tl[q][0]), fmt_b(tl[q][1])) == (fmt_up(tail0[q][0]), fmt_b(tail0[q][1])), tl
+    up90 = [iso_tail[v][0.90][0] for v in iso_tail]
+    b90 = [iso_tail[v][0.90][1] for v in iso_tail]
+    up99 = [iso_tail[v][0.99][0] for v in iso_tail]
+    b99 = [iso_tail[v][0.99][1] for v in iso_tail]
+    assert min(b90) > 0 and min(b99) > 0, (b90, b99)
+    n0 = int(_snapsens_get(R, "iso", 3)["events"])
+    assert n0 == len(ev0)
+    reach = [100.0 * int(_snapsens_get(R, "iso", v)["perwin"]) / int(_snapsens_get(R, "iso", v)["present"])
+             for v in (2, 2.5, 3, 4)]
+    coh_cat = [abs(int(_snapsens_get(R, "coh", v)["events"]) / n0 - 1.0) * 100.0 for v in (1.5, 2, 5, 8)]
+
+    # 4. isolation: wave crests, the snap events, and the node-local samples above 10 kN
+    cq, ca = D["crest_q"], D["crest_above"]
+    assert cq[99.99] < 2.0 < 3.0 and ca[3.0] < 1e-5 * D["crest_n"], (cq, ca)
+    ev_iso10 = int((E[:, ec["iso"]] > 10.0).sum())
+    assert (E[E[:, ec["iso"]] > 10.0, ec["coh"]] < 3.0).all()
+    N = D["nodelocal"]
+    niso = N[:, rc["iso"]]
+    n_sust, n_iso, n_mid = int((niso <= 1.05).sum()), int((niso > 10).sum()), int(((niso > 1.05) & (niso <= 10)).sum())
+    assert n_mid < 0.6 * n_sust < n_iso, (n_sust, n_mid, n_iso)
+    shape_n = int(((N[:, rc["T"]] > SHAPE_DEF["Tt"]) & (niso > SHAPE_DEF["it"])).sum())
+    assert shape_n == n_iso                                                # = the shape-flagged samples
+
+    # 5. the slack condition of the snap rule: min of the 10 preceding samples < 0.25 T
+    cat_rows = rows(SNAP_CAT)
+    pre = np.array([float(r["pre_slack"]) / float(r["peak"]) for r in cat_rows])
+    zero_pct = 100.0 * float((pre == 0.0).mean())
+    assert zero_pct > 50.0 and pre.max() < 0.25, (zero_pct, pre.max())
+    slack_cat = {v: int(_snapsens_get(R, "slack", v)["events"]) - n0 for v in (0.1, 0.15, 0.4, 0.5, 0.75)}
+    slack_max = max(abs(d) for d in slack_cat.values())
+
+    def kn(x):
+        return f"{x / 1000.0:.1f}"
+    return [
+        ("thrSegWeight", f"{seg_w / 1000.0:.2f}",
+         f"w_s L0/20 for the 105 m line = {W_SUB:.1f} x 5.25 = {seg_w!r} N (75 m line: "
+         f"{W_SUB * 3.75:.0f} N)"),
+        ("thrSegDiffMed", f"{dT_med:,}".replace(",", "\\,"),
+         f"threshold_scan.pkl: median |T_i - T_neighbour| over the station-samples above 10 kN of the "
+         f"clean simulations, neighbour = the more heavily loaded one, 1 N bins; p99 = {dT_p99} N"),
+        ("thrSegResOrd", f"{res_med}",
+         f"same samples, median |residual| of the axial balance over that one segment, accelerations "
+         f"from second differences of the archived positions; p99 = {res_p99} N"),
+        ("thrCleanSamplesM", f"{n10 / 1e6:.1f}",
+         f"station-samples above 10 kN in the {len(clean)} clean simulations = {n10}"),
+        ("thrCohCleanMax", f"{cmax:.2f}",
+         f"largest coh among them = {cmax!r}; every value >= 1.1 is at the fairlead "
+         f"({int(hi[-1])} samples), none at stations 0-19"),
+        ("thrCohHiN", f"{len(H):,}".replace(",", "\\,"),
+         "station-samples above 10 kN with coh > 1.25, all in flagged simulations"),
+        ("thrCohResLo", kn(band_res[0]),
+         "median |segment residual| [kN] of those with coh in (1.25, 1.5]; bands (1.25,1.5]/"
+         "(1.5,2]/(2,3]/(3,5]/(5,10]/(10,inf) = " + "/".join(f"{b / 1000:.1f}" for b in band_res)
+         + " kN (the first is the smallest, asserted)"),
+        ("thrSegResSnap", f"{ev_res:.0f}",
+         f"median |segment residual| [N] at the {len(E)} catalogued snap events "
+         f"({SNAP_CAT.name}), the event station against its more heavily loaded neighbour"),
+        ("thrCohEvMed", f"{ev_coh:.3f}", f"median coh of those events (max {ev_coh_max:.2f})"),
+        ("thrCohMargin", f"{3.0 / cmax:.1f}", f"3 / {cmax:.4f}"),
+        ("thrCohMaskMax", f"{coh_mask_max}",
+         "largest number of samples the training mask gains or loses with the coherence bound at "
+         + ", ".join(f"{k:g}: +{v['added']}/-{v['removed']}" for k, v in coh_v.items())
+         + f" (of {sum(len(s) for s in pub.values())}); no simulation added (asserted)"),
+        ("thrCohCatMax", f"{max(coh_cat):.1f}",
+         "largest |change| [%] of the catalogue (902 events) with the snap coherence bound at "
+         "1.5/2/5/8 = " + "/".join(f"{x:.2f}" for x in coh_cat)
+         + "; the non-snap p90/p99 rate and bias are unchanged at the reported precision (asserted)"),
+        ("thrFairOnlySamples", f"{no_fair['removed']}",
+         f"samples that only the fair branch flags (fair bound removed); "
+         f"simulations: {len(pub_sims)} -> {no_fair['sims']}"),
+        ("thrFairOnlySims", f"{len(pub_sims) - no_fair['sims']}", "simulations flagged by that branch alone"),
+        ("thrCrestM", f"{D['crest_n'] / 1e6:.2f}",
+         f"temporal crests above 3 kN not preceded by slack (min of 10 preceding >= 0.25 T), no rule "
+         f"flags the sample = {D['crest_n']}; slack-preceded crests: {D['crest_slack_n']}"),
+        ("thrCrestPct", f"{cq[99.99]:.2f}",
+         f"99.99th percentile of their iso = {cq[99.99]!r} (99.9th {cq[99.9]:.3f}, "
+         f"99.999th {cq[99.999]:.3f}, max {cq[100]:.3f})"),
+        ("thrCrestAbove", f"{ca[3.0]}", f"of them with iso > 3 (> 2: {ca[2.0]}, > 10: {ca[10.0]})"),
+        ("thrIsoCatTwo", f"{int(_snapsens_get(R, 'iso', 2)['events']):,}".replace(",", "\\,"),
+         "catalogue size with the snap isolation bound at 2 (snap_sens_out.csv)"),
+        ("thrIsoCatFour", f"{int(_snapsens_get(R, 'iso', 4)['events'])}", "same, bound at 4"),
+        ("thrIsoUpLo", fmt_up(min(up90)),
+         "Stage-1 screened dump, non-snap p90 fairlead tail, underprediction rate [%] with the catalogue "
+         "rebuilt at iso bound 2/2.5/3/4 = " + "/".join(f"{x:.2f}" for x in up90)),
+        ("thrIsoUpHi", fmt_up(max(up90)), "largest of the same"),
+        ("thrIsoBiasLo", f"{min(b90):.0f}",
+         "same population, mean signed error [N] = " + "/".join(f"{x:.1f}" for x in b90)
+         + "; p99: rate " + "/".join(f"{x:.1f}" for x in up99) + " %, bias "
+         + "/".join(f"{x:.0f}" for x in b99) + " N"),
+        ("thrIsoBiasHi", f"{max(b90):.0f}", "largest of the same"),
+        ("thrIsoReachLo", f"{min(reach):.0f}",
+         "share [%] of catalogued events reachable under per-window exclusion, iso bound 2/2.5/3/4 = "
+         + "/".join(f"{x:.1f}" for x in reach) + " (snap_sens_out.csv)"),
+        ("thrIsoReachHi", f"{max(reach):.0f}", "largest of the same"),
+        ("thrEvIsoTenPct", f"{100.0 * ev_iso10 / len(E):.0f}",
+         f"{ev_iso10} of the {len(E)} catalogued events have iso > 10, all with coh < 3"),
+        ("thrNlSust", f"{n_sust}",
+         "station-samples above 10 kN with coh > 3 or fair > 3 (record maximum) and iso <= 1.05"),
+        ("thrNlIso", f"{n_iso}", "same, iso > 10 (= the station-samples the shape rule flags)"),
+        ("thrNlMid", f"{n_mid}", "same, 1.05 < iso <= 10"),
+        ("thrFloorAdd", f"{floor_v['added']}",
+         f"samples the training mask gains with the shape-rule floor lowered from 10 to 7.5 kN, in "
+         f"{floor_v['sims']} simulations ({floor_v['new']} not flagged before)"),
+        ("thrFloorEval", f"{floor_v['in_eval']}",
+         f"of them already in the evaluation mask ({MASK_EVAL.name}), i.e. screened from the test "
+         f"windows by the fairlead condition"),
+        ("thrSlackZeroPct", f"{zero_pct:.0f}",
+         f"catalogued events ({SNAP_CAT.name}) whose station tension is exactly zero at some sample "
+         f"of the 10 preceding the event [%]; {100 * (pre < 0.02).mean():.0f} % below 0.02 T, max {pre.max():.3f} T"),
+        ("thrSlackCatMax", f"{slack_max}",
+         "largest |change| of the catalogue (events) with the slack fraction at 0.1/0.15/0.4/0.5/0.75 = "
+         + "/".join(f"{d:+d}" for d in slack_cat.values()) + " (snap_sens_out.csv)"),
+        ("thrIsoMaskMax", f"{iso_mask_max}",
+         "largest number of samples the training mask gains or loses with the shape isolation bound at "
+         + ", ".join(f"{k:g}: +{v['added']}/-{v['removed']}" for k, v in iso_v.items())
+         + "; no simulation added (asserted)"),
+    ]
+
+
+# ---------------------------------------------------------------------------------
 # The wave-train repeat (Data 2.4), on the per-entry metrics of BOTH shipped models.
 #
 # Replaces the fairlead-peak-only check (paperA_repeat_check.py, kept as a script). The
@@ -2647,7 +2950,7 @@ def table_noise():
     return s
 
 
-# ------------------------------------------------------------------ Appendix D: the screened windows
+# ------------------------------------------------------------------ Results 4.4: the screened windows (the former appendix on them was removed)
 # Data 2.5: the fairlead condition (no station other than the fairlead above 1 kN and above the
 # fairlead at the same sample) is a snap condition, NOT in the training mask; after training it
 # screened the published test draws (EVAL_CLEAN job, patch sr-22). This measures what that removal
@@ -3033,7 +3336,7 @@ def _kendall_sigma(stage, name):
 
 
 def _kendall_checks():
-    """Guards for the statements Appendix B makes about the two rankings."""
+    """Guards for the statements Appendix D makes about the two rankings."""
     o1, o2 = _kendall_order(1), _kendall_order(2)
     diff = [i for i in range(len(o1)) if o1[i] != o2[i]]
     # the two stages order the terms alike except that L1 and pinball exchange places
@@ -3048,7 +3351,7 @@ def _kendall_checks():
 
 
 def table_kendall(stage):
-    """Appendix B: the eight loss terms ranked by their learned scale sigma_k, one stage."""
+    """Appendix D: the eight loss terms ranked by their learned scale sigma_k, one stage."""
     _kendall_checks()
     ep, s = shipped_kendall(stage)
     label = {n: (lab, sym) for n, lab, sym in KENDALL_TERMS}
@@ -3062,7 +3365,7 @@ def table_kendall(stage):
     return t
 
 
-# ------------------------------------------------------------------ Appendix D: linear regression
+# ------------------------------------------------------------------ Appendix E: linear regression
 # Linear_Regression.ipynb, cluster job 885495 (CLAUDE.md 17.3): five least-squares models fitted on
 # Stage 1's exact training split and scored with Stage 1's metric code on its screened test draw.
 # The job's LR0-LR3 outputs are byte-identical to job 872463's (checked 2026-10-01).
@@ -3151,7 +3454,7 @@ def _lr_data():
 
 
 def build_linear():
-    """Appendix D: the linear ladder. Every number in its prose."""
+    """Appendix E: the linear ladder. Every number in its prose."""
     d = _lr_data()
     fit, fits, pw, keys = d["fit"], d["fit"]["fits"], d["pw"], d["keys"]
     n_in = {m: sum(1 for _ in rows(LR / m / "coefficients.csv")) - 1 for m in LR_MODELS[1:]}
@@ -3229,7 +3532,7 @@ def _lr_count(n):
 
 
 def table_linear():
-    """Appendix D table (trimmed 2026-10-02): Stage 1 against LR0-LR4 on the screened draw.
+    """Appendix E table (trimmed 2026-10-02): Stage 1 against LR0-LR4 on the screened draw.
     The full comparison per site group is in the data repository."""
     d = _lr_data()
     summ, groups = d["summ"], d["groups"]
@@ -3297,6 +3600,7 @@ MACRO_GROUPS = [
     ("Snap loads -- reachability and per-event capture", build_snaps),
     ("Curation: artifact mask", build_curation),
     ("Curation: the catenary rule (Data 2.5)", build_catenary),
+    ("Appendix B -- the coherence and isolation bounds of the two rules", build_thresholds),
     ("Wave-train repeat, per-entry metrics of both stages, clean test draws", build_repeat),
     ("Per-site transfer -- the withheld locations", build_sites),
     ("Method: architecture, optimisation and selection", build_architecture),
@@ -3308,7 +3612,7 @@ MACRO_GROUPS = [
     ("Results 4.3 -- motion-measurement noise (levels of job 236311, clean draw of job 402698)", build_noise),
     ("Results 4.4 -- what the test-window screen removed (published vs screened draw)",
      build_residue),
-    ("Appendix D -- linear regression models versus Stage 1 (job 885495)", build_linear),
+    ("Appendix E -- linear regression models versus Stage 1 (job 885495)", build_linear),
 ]
 
 HEADER = """%% =====================================================================

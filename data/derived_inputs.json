@@ -308,6 +308,246 @@
     ]
    }
   ],
+  "build_thresholds[]": [
+   {
+    "__tuple__": [
+     "thrSegWeight",
+     "1.26",
+     "w_s L0/20 for the 105 m line = 240.5 x 5.25 = 1262.8683388125 N (75 m line: 902 N)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrSegDiffMed",
+     "1\\,275",
+     "threshold_scan.pkl: median |T_i - T_neighbour| over the station-samples above 10 kN of the clean simulations, neighbour = the more heavily loaded one, 1 N bins; p99 = 1470 N"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrSegResOrd",
+     "6",
+     "same samples, median |residual| of the axial balance over that one segment, accelerations from second differences of the archived positions; p99 = 61 N"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCleanSamplesM",
+     "12.3",
+     "station-samples above 10 kN in the 2874 clean simulations = 12322869"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohCleanMax",
+     "1.21",
+     "largest coh among them = 1.2075953210566719; every value >= 1.1 is at the fairlead (9380875 samples), none at stations 0-19"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohHiN",
+     "2\\,699",
+     "station-samples above 10 kN with coh > 1.25, all in flagged simulations"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohResLo",
+     "10.9",
+     "median |segment residual| [kN] of those with coh in (1.25, 1.5]; bands (1.25,1.5]/(1.5,2]/(2,3]/(3,5]/(5,10]/(10,inf) = 10.9/17.6/71.9/68.0/132.6/239.1 kN (the first is the smallest, asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrSegResSnap",
+     "62",
+     "median |segment residual| [N] at the 902 catalogued snap events (snap_catalogue_cat.csv), the event station against its more heavily loaded neighbour"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohEvMed",
+     "1.006",
+     "median coh of those events (max 2.80)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohMargin",
+     "2.5",
+     "3 / 1.2076"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohMaskMax",
+     "46",
+     "largest number of samples the training mask gains or loses with the coherence bound at 1.5: +33/-0, 2: +12/-0, 2.5: +4/-0, 4: +0/-14, 5: +0/-26, 7: +0/-36, 10: +0/-46 (of 1643); no simulation added (asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCohCatMax",
+     "1.6",
+     "largest |change| [%] of the catalogue (902 events) with the snap coherence bound at 1.5/2/5/8 = 0.89/0.44/0.78/1.55; the non-snap p90/p99 rate and bias are unchanged at the reported precision (asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrFairOnlySamples",
+     "8",
+     "samples that only the fair branch flags (fair bound removed); simulations: 109 -> 104"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrFairOnlySims",
+     "5",
+     "simulations flagged by that branch alone"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCrestM",
+     "8.25",
+     "temporal crests above 3 kN not preceded by slack (min of 10 preceding >= 0.25 T), no rule flags the sample = 8254017; slack-preceded crests: 22843"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCrestPct",
+     "1.73",
+     "99.99th percentile of their iso = 1.7260781356810675 (99.9th 1.143, 99.999th 2.585, max 3.657)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCrestAbove",
+     "21",
+     "of them with iso > 3 (> 2: 371, > 10: 0)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoCatTwo",
+     "1\\,157",
+     "catalogue size with the snap isolation bound at 2 (snap_sens_out.csv)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoCatFour",
+     "706",
+     "same, bound at 4"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoUpLo",
+     "7.7",
+     "Stage-1 screened dump, non-snap p90 fairlead tail, underprediction rate [%] with the catalogue rebuilt at iso bound 2/2.5/3/4 = 7.66/7.87/7.90/7.93"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoUpHi",
+     "7.9",
+     "largest of the same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoBiasLo",
+     "131",
+     "same population, mean signed error [N] = 133.2/131.4/131.8/131.2; p99: rate 9.5/11.1/10.7/11.7 %, bias 247/221/227/200 N"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoBiasHi",
+     "133",
+     "largest of the same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoReachLo",
+     "72",
+     "share [%] of catalogued events reachable under per-window exclusion, iso bound 2/2.5/3/4 = 72.5/73.2/72.5/71.5 (snap_sens_out.csv)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoReachHi",
+     "73",
+     "largest of the same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrEvIsoTenPct",
+     "17",
+     "150 of the 902 catalogued events have iso > 10, all with coh < 3"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrNlSust",
+     "274",
+     "station-samples above 10 kN with coh > 3 or fair > 3 (record maximum) and iso <= 1.05"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrNlIso",
+     "1770",
+     "same, iso > 10 (= the station-samples the shape rule flags)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrNlMid",
+     "162",
+     "same, 1.05 < iso <= 10"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrFloorAdd",
+     "21",
+     "samples the training mask gains with the shape-rule floor lowered from 10 to 7.5 kN, in 114 simulations (5 not flagged before)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrFloorEval",
+     "19",
+     "of them already in the evaluation mask (artifact_samples_cat.csv), i.e. screened from the test windows by the fairlead condition"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrSlackZeroPct",
+     "79",
+     "catalogued events (snap_catalogue_cat.csv) whose station tension is exactly zero at some sample of the 10 preceding the event [%]; 87 % below 0.02 T, max 0.248 T"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrSlackCatMax",
+     "3",
+     "largest |change| of the catalogue (events) with the slack fraction at 0.1/0.15/0.4/0.5/0.75 = -3/-1/+1/+2/+2 (snap_sens_out.csv)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrIsoMaskMax",
+     "14",
+     "largest number of samples the training mask gains or loses with the shape isolation bound at 7: +4/-0, 15: +0/-14; no simulation added (asserted)"
+    ]
+   }
+  ],
   "checkpoint_dump[33]": {
    "__dict__": [
     [
