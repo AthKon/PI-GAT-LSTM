@@ -382,8 +382,8 @@
    {
     "__tuple__": [
      "thrCohMaskMax",
-     "46",
-     "largest number of samples the training mask gains or loses with the coherence bound at 1.5: +33/-0, 2: +12/-0, 2.5: +4/-0, 4: +0/-14, 5: +0/-26, 7: +0/-36, 10: +0/-46 (of 1643); no simulation added (asserted)"
+     "41",
+     "largest number of samples the training mask gains or loses with the coherence bound at 1.5: +33/-0, 2: +12/-0, 2.5: +4/-0, 4: +0/-14, 5: +0/-26, 7: +0/-36, 8: +0/-41 (of 1643); no simulation added (asserted)"
     ]
    },
    {
@@ -545,6 +545,132 @@
      "thrIsoMaskMax",
      "14",
      "largest number of samples the training mask gains or loses with the shape isolation bound at 7: +4/-0, 15: +0/-14; no simulation added (asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrPrevMed",
+     "11",
+     "median over the 902 catalogued events of the station tension one sample BEFORE the peak, as a share of the peak [%] (cache_npy)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrNextMed",
+     "21",
+     "same, one sample AFTER the peak (all below 2/3 by iso > 3; asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrSettleMed",
+     "38",
+     "same, median of the samples 3 to 10 after the peak: the line stays taut at this share"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabUpLo",
+     "7.7",
+     "Table B.1 (thr_iso_rows): non-snap p90 underprediction rate [%], isolation bound 2/3/4/5/7/10 = 7.66/7.90/7.93/8.21/8.56/9.17"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabUpHi",
+     "9.2",
+     "largest of the same; the bias is positive throughout (asserted)"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabReachLo",
+     "71.5",
+     "share [%] of events reachable per window, bound 2/3/4/5 = 72.5/72.5/71.5/71.5"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabReachHi",
+     "72.5",
+     "largest of the same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabNinetyNineLo",
+     "9.5",
+     "non-snap p99 underprediction rate [%], bound 2/3/4 = 9.51/10.71/11.68"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabNinetyNineHi",
+     "11.7",
+     "largest of the same"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrTabNinetyNineTen",
+     "20",
+     "same at bound 10; the weaker spikes that a stricter bound no longer catalogues enter the non-snap group"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapSoneLo",
+     "0.85",
+     "Stage 1 own-station capture, median over the 42 events with iso <= 4"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapSoneLoN",
+     "42",
+     "events with iso <= 4 in the Stage-1 dump"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapSoneHi",
+     "0.73",
+     "same, over the 55 events with iso > 4"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapSoneHiN",
+     "55",
+     "events with iso > 4 in the Stage-1 dump"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapStwoLo",
+     "0.99",
+     "Stage 2 from four sensors, own-station capture over the 18 events with iso <= 4"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapStwoLoN",
+     "18",
+     "events with iso <= 4 in the Stage-2 dump at four sensors"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapStwoHi",
+     "0.91",
+     "same, over the 27 events with iso > 4"
+    ]
+   },
+   {
+    "__tuple__": [
+     "thrCapStwoHiN",
+     "27",
+     "events with iso > 4 in the Stage-2 dump at four sensors"
     ]
    }
   ],
@@ -1176,6 +1302,82 @@
     "exact_split_accounting.py (block-aware) --catalogue snap_catalogue_cat.csv --mask artifact_samples.csv, TOTAL row"
    ]
   },
+  "thr_event_profile[]": {
+   "__dict__": [
+    [
+     "prev",
+     10.808284088247122
+    ],
+    [
+     "next",
+     20.87578840885002
+    ],
+    [
+     "settle",
+     38.27254758071682
+    ],
+    [
+     "n",
+     902
+    ]
+   ]
+  },
+  "thr_iso_rows[]": [
+   [
+    2,
+    1157,
+    72.5151253241141,
+    7.65825586542718,
+    133.2095115631225,
+    9.508196721311474,
+    247.1426965932377
+   ],
+   [
+    3,
+    902,
+    72.50554323725055,
+    7.897033158813263,
+    131.82878626745202,
+    10.714285714285714,
+    227.17096528552827
+   ],
+   [
+    4,
+    706,
+    71.52974504249292,
+    7.931404072883172,
+    131.166107943127,
+    11.68091168091168,
+    199.90301148504273
+   ],
+   [
+    5,
+    557,
+    71.45421903052065,
+    8.213984835720304,
+    129.85478013768954,
+    14.393939393939394,
+    178.24483852193814
+   ],
+   [
+    7,
+    376,
+    67.81914893617021,
+    8.561359867330017,
+    128.0020154760054,
+    16.428571428571427,
+    160.06935221354166
+   ],
+   [
+    10,
+    263,
+    63.87832699619772,
+    9.165302782324058,
+    120.65213337350399,
+    20.12987012987013,
+    106.5854301948052
+   ]
+  ],
   "true_contact_regions[]": {
    "__tuple__": [
     32,

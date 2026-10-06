@@ -8,7 +8,7 @@ Oriol Colomés (Delft University of Technology), in preparation for submission t
 |---|---|
 | Trained models, input normalisers, logs and evaluation outputs | 4TU.ResearchData, https://doi.org/10.4121/e3f167ac-2925-4815-956e-5ef3d883f1a5 (CC BY 4.0) |
 | Code (this repository) | MIT licence |
-| Code version used for the deposited files | release **v1.1** of this repository (v1.0 plus the threshold study of Appendix B; the deposited files are unchanged) |
+| Code version used for the deposited files | release **v1.2** of this repository (v1.0 plus the threshold study of Appendix B and its isolation-bound table; the deposited files are unchanged) |
 | Contact | Athanasios Konstantaras, thanoskonstantaras@gmail.com |
 
 The repository holds the notebooks that trained and evaluated the models, the scripts that turn
@@ -258,7 +258,7 @@ With the three archives unpacked into `DATA`, from the repository root:
 
 ```bash
 export PAPERA_DATA=/path/to/DATA
-python paperA_numbers.py      # paperA_output/numbers.tex (561 macros) and paperA_output/tables/ (13 tables)
+python paperA_numbers.py      # paperA_output/numbers.tex (613 macros) and paperA_output/tables/ (14 tables)
 python paperA_figures.py      # paperA_output/figures/
 ```
 
@@ -277,7 +277,7 @@ the global-context ablation, two Stage 2 per-checkpoint test dumps (a comparison
 the development tree and stored in `data/derived_inputs.json` and `data/derived_inputs_arrays.npz`
 (`python paperA_numbers.py --write-derived`). With `PAPERA_DATA` set they are read from there;
 four macro groups come from them entirely (the simulation campaign, 14 macros; the catenary
-condition, 23; the threshold values, 34; compute times, 6). With the raw simulations available, `PAPERA_RECOMPUTE=1`
+condition, 23; the threshold values, 52; compute times, 6). With the raw simulations available, `PAPERA_RECOMPUTE=1`
 recomputes the ones that read them.
 
 **Figures.** Figures 5, 6, 7, 9 and 10 (`fig_peaks`, `fig_snaptraces`, `fig_sweep`,

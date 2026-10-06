@@ -827,6 +827,92 @@ def _snap_variant_events(A, c, isomin=3.0, cohmax=3.0):
     return [(k_ // 10000, k_ % 10000, max(g, key=lambda u: tp[(k_, u)])) for k_, g in groups]
 
 
+def _nonsnap_tail(z, ev):
+    """Stage-1 fairlead peaks above T90 and T99 in the windows that hold no event of `ev`.
+
+    ev = [(loc, case, t)]; a window starting at s holds an event when s <= t < s + REPEAT_W.
+    Returns (is_snap per window, {q: (underprediction rate [%], mean signed error [N])})."""
+    meta, pt, pp = z["meta_all"], z["peak_true_all"], z["peak_pred_all"]
+    bym = collections.defaultdict(list)
+    for j, m in enumerate(meta):
+        bym[(int(m[0]), int(m[1]))].append((int(m[3]), j))
+    by_case = collections.defaultdict(list)
+    for l, cs, tt in ev:
+        by_case[(l, cs)].append(tt)
+    is_snap = np.zeros(len(meta), bool)
+    for k, ts in by_case.items():
+        for st, j in bym.get(k, []):
+            if any(st <= tt < st + REPEAT_W for tt in ts):
+                is_snap[j] = True
+    out = {}
+    for q in (0.90, 0.99):
+        sel = (pt >= float(np.quantile(pt, q))) & ~is_snap
+        e = (pp - pt)[sel]
+        out[q] = (100.0 * float((e < 0).mean()), float(e.mean()))
+    return is_snap, out
+
+
+THR_ISO_BOUNDS = (2, 3, 4, 5, 7, 10)      # rows of Table B.1
+
+
+@derived
+def thr_iso_rows():
+    """Appendix B, Table B.1: the isolation bound of the snap rule against the size of the catalogue,
+    the share of its events reachable under per-window exclusion (snap_sens_out.csv) and the Stage-1
+    non-snap fairlead tails of Results 4.1.3, with the catalogue rebuilt at each bound from the
+    relaxed candidate table of cat_study/snap_sens.pkl. Rows: bound, events, reachable [%], u90 [%],
+    bias90 [N], u99 [%], bias99 [N]."""
+    S = pickle.loads((CAT_STUDY / "snap_sens.pkl").read_bytes())
+    A, sc = S["table"], {k: i for i, k in enumerate(S["cols"])}
+    R = _snapsens_rows()
+    z = npload(T1 / "test_timeseries_dump.npz")
+    out = []
+    for v in THR_ISO_BOUNDS:
+        ev = _snap_variant_events(A, sc, isomin=float(v))
+        g = _snapsens_get(R, "iso", v)
+        assert len(ev) == int(g["events"]), (v, len(ev), g["events"])
+        _, t = _nonsnap_tail(z, ev)
+        out.append([v, len(ev), 100.0 * int(g["perwin"]) / int(g["present"]),
+                    t[0.90][0], t[0.90][1], t[0.99][0], t[0.99][1]])
+    return out
+
+
+@derived
+def thr_event_profile():
+    """Appendix B.3: the time structure of the catalogued snap events, read from the cache.
+
+    At each event's station: the sample before the peak, the sample after it and the median of the
+    samples 3 to 10 after it, each as a share of the peak. Returns the medians over the events [%]."""
+    prev, nxt, settle = [], [], []
+    for r in rows(SNAP_CAT):
+        l, c, t, n = int(r["loc"]), int(r["case"]), int(r["t"]), int(r["node"])
+        T = npload(CACHE / f"loc{l:02d}" / f"case_{c:04d}" / "tension.npy", mmap_mode="r")
+        w = np.asarray(T[t - 1:t + 11, n], np.float64)               # samples t-1 ... t+10
+        assert w.size == 12 and w[1] > 0, (l, c, t)
+        prev.append(w[0] / w[1])
+        nxt.append(w[2] / w[1])
+        settle.append(float(np.median(w[4:])) / w[1])
+    assert max(nxt) < 2.0 / 3.0                                      # iso > 3 forces it
+    return dict(prev=100.0 * float(np.median(prev)), next=100.0 * float(np.median(nxt)),
+                settle=100.0 * float(np.median(settle)), n=len(nxt))
+
+
+def thr_capture_by_iso():
+    """Own-station snap capture (Results 4.1.3), median over distinct events, for the catalogued
+    events with iso up to 4 and above 4: {stage: (median, n, median, n)}, Stage 1 and Stage 2 at
+    four sensors. The two groups partition the events the dumps score."""
+    iso = {(int(r["loc"]), int(r["case"]), int(r["t"])): float(r["iso"]) for r in rows(SNAP_CAT)}
+    out = {}
+    for name, z, nin in (("one", npload(T1 / "test_timeseries_dump.npz"), None),
+                         ("two", npload(T2 / "test_timeseries_dump.npz"), 4)):
+        caps = own_station_events(z, nin)
+        lo = [v[0] for k, v in caps.items() if iso[k] <= 4.0]
+        hi = [v[0] for k, v in caps.items() if iso[k] > 4.0]
+        assert lo and hi and len(lo) + len(hi) == len(caps)
+        out[name] = (statistics.median(lo), len(lo), statistics.median(hi), len(hi))
+    return out
+
+
 @derived
 def build_thresholds():
     """Appendix B: what the coherence and isolation bounds of the shape and snap rules rest on.
@@ -925,7 +1011,7 @@ def build_thresholds():
         return dict(added=added, removed=removed, sims=sims, new=len(new_sims), in_eval=in_eval)
     base = mask_variant()
     assert base["added"] == base["removed"] == base["new"] == 0 and base["sims"] == len(pub_sims)
-    coh_v = {v: mask_variant(ct=v) for v in (1.5, 2.0, 2.5, 4.0, 5.0, 7.0, 10.0)}
+    coh_v = {v: mask_variant(ct=v) for v in (1.5, 2.0, 2.5, 4.0, 5.0, 7.0, 8.0)}
     iso_v = {v: mask_variant(it=v) for v in (7.0, 15.0)}
     assert all(r["new"] == 0 for r in coh_v.values()) and all(r["new"] == 0 for r in iso_v.values())
     coh_mask_max = max(max(r["added"], r["removed"]) for r in coh_v.values())
@@ -939,26 +1025,10 @@ def build_thresholds():
     A = S["table"]
     sc = {k: i for i, k in enumerate(S["cols"])}
     z = npload(T1 / "test_timeseries_dump.npz")
-    meta, pt, pp = z["meta_all"], z["peak_true_all"], z["peak_pred_all"]
-    bym = collections.defaultdict(list)
-    for j, m in enumerate(meta):
-        bym[(int(m[0]), int(m[1]))].append((int(m[3]), j))
+    meta = z["meta_all"]
 
     def nonsnap_tail(ev):
-        by_case = collections.defaultdict(list)
-        for l, cs, tt in ev:
-            by_case[(l, cs)].append(tt)
-        is_snap = np.zeros(len(meta), bool)
-        for k, ts in by_case.items():
-            for st, j in bym.get(k, []):
-                if any(st <= tt < st + REPEAT_W for tt in ts):
-                    is_snap[j] = True
-        out = {}
-        for q in (0.90, 0.99):
-            sel = (pt >= float(np.quantile(pt, q))) & ~is_snap
-            s = (pp - pt)[sel]
-            out[q] = (100.0 * float((s < 0).mean()), float(s.mean()))
-        return is_snap, out
+        return _nonsnap_tail(z, ev)
     ev0 = _snap_variant_events(A, sc)
     assert len(ev0) == len(rows(SNAP_CAT)), len(ev0)
     keys = {(int(a), int(b), int(c_), int(d)) for a, b, c_, d, _t in z["snap_ev"]}
@@ -1002,6 +1072,20 @@ def build_thresholds():
     assert zero_pct > 50.0 and pre.max() < 0.25, (zero_pct, pre.max())
     slack_cat = {v: int(_snapsens_get(R, "slack", v)["events"]) - n0 for v in (0.1, 0.15, 0.4, 0.5, 0.75)}
     slack_max = max(abs(d) for d in slack_cat.values())
+
+    # 6. the time structure of the events, the isolation table, and the capture by isolation
+    prof = thr_event_profile()
+    iso_rows = thr_iso_rows()
+    cap = thr_capture_by_iso()
+    row3 = [r for r in iso_rows if r[0] == 3][0]
+    assert (fmt_up(row3[3]), fmt_b(row3[4])) == (fmt_up(tail0[0.90][0]), fmt_b(tail0[0.90][1]))
+    assert all(r[4] > 0 and r[6] > 0 for r in iso_rows), iso_rows          # conservative bias throughout
+    assert [r[1] for r in iso_rows] == sorted((r[1] for r in iso_rows), reverse=True)
+    u90_all = [r[3] for r in iso_rows]
+    reach_to5 = [r[2] for r in iso_rows if r[0] <= 5]
+    u99_to4 = [r[5] for r in iso_rows if r[0] <= 4]
+    u99_ten = [r[5] for r in iso_rows if r[0] == 10][0]
+    assert u99_ten > 1.5 * max(u99_to4)                                     # the p99 tail does move
 
     def kn(x):
         return f"{x / 1000.0:.1f}"
@@ -1088,6 +1172,37 @@ def build_thresholds():
          "largest number of samples the training mask gains or loses with the shape isolation bound at "
          + ", ".join(f"{k:g}: +{v['added']}/-{v['removed']}" for k, v in iso_v.items())
          + "; no simulation added (asserted)"),
+        ("thrPrevMed", f"{prof['prev']:.0f}",
+         f"median over the {prof['n']} catalogued events of the station tension one sample BEFORE the "
+         f"peak, as a share of the peak [%] (cache_npy)"),
+        ("thrNextMed", f"{prof['next']:.0f}",
+         "same, one sample AFTER the peak (all below 2/3 by iso > 3; asserted)"),
+        ("thrSettleMed", f"{prof['settle']:.0f}",
+         "same, median of the samples 3 to 10 after the peak: the line stays taut at this share"),
+        ("thrTabUpLo", fmt_up(min(u90_all)),
+         "Table B.1 (thr_iso_rows): non-snap p90 underprediction rate [%], isolation bound 2/3/4/5/7/10 = "
+         + "/".join(f"{x:.2f}" for x in u90_all)),
+        ("thrTabUpHi", fmt_up(max(u90_all)), "largest of the same; the bias is positive throughout (asserted)"),
+        ("thrTabReachLo", f"{min(reach_to5):.1f}",
+         "share [%] of events reachable per window, bound 2/3/4/5 = " + "/".join(f"{x:.1f}" for x in reach_to5)),
+        ("thrTabReachHi", f"{max(reach_to5):.1f}", "largest of the same"),
+        ("thrTabNinetyNineLo", fmt_up(min(u99_to4)),
+         "non-snap p99 underprediction rate [%], bound 2/3/4 = " + "/".join(f"{x:.2f}" for x in u99_to4)),
+        ("thrTabNinetyNineHi", fmt_up(max(u99_to4)), "largest of the same"),
+        ("thrTabNinetyNineTen", f"{u99_ten:.0f}",
+         "same at bound 10; the weaker spikes that a stricter bound no longer catalogues enter the non-snap group"),
+        ("thrCapSoneLo", f"{cap['one'][0]:.2f}",
+         f"Stage 1 own-station capture, median over the {cap['one'][1]} events with iso <= 4"),
+        ("thrCapSoneLoN", f"{cap['one'][1]}", "events with iso <= 4 in the Stage-1 dump"),
+        ("thrCapSoneHi", f"{cap['one'][2]:.2f}",
+         f"same, over the {cap['one'][3]} events with iso > 4"),
+        ("thrCapSoneHiN", f"{cap['one'][3]}", "events with iso > 4 in the Stage-1 dump"),
+        ("thrCapStwoLo", f"{cap['two'][0]:.2f}",
+         f"Stage 2 from four sensors, own-station capture over the {cap['two'][1]} events with iso <= 4"),
+        ("thrCapStwoLoN", f"{cap['two'][1]}", "events with iso <= 4 in the Stage-2 dump at four sensors"),
+        ("thrCapStwoHi", f"{cap['two'][2]:.2f}",
+         f"same, over the {cap['two'][3]} events with iso > 4"),
+        ("thrCapStwoHiN", f"{cap['two'][3]}", "events with iso > 4 in the Stage-2 dump at four sensors"),
     ]
 
 
@@ -3563,6 +3678,23 @@ def table_linear():
     return s
 
 
+def table_thresholds_iso():
+    """Appendix B, Table B.1: the isolation bound of the snap rule against the catalogue and what
+    rests on it (thr_iso_rows)."""
+    s = ("\\begin{tabular}{@{}r S[table-format=4.0] S[table-format=2.1] S[table-format=2.1]"
+         " S[table-format=+3.0] S[table-format=2.1] S[table-format=+3.0]@{}}\n\\toprule\n")
+    s += _row(["{Bound}", "{Events}", "{Reachable}", "{$u_{90}$}", "{Bias$_{90}$}", "{$u_{99}$}",
+               "{Bias$_{99}$}"])
+    s += _row(["", "", "{[\\si{\\percent}]}", "{[\\si{\\percent}]}", "{[\\si{\\newton}]}",
+               "{[\\si{\\percent}]}", "{[\\si{\\newton}]}"])
+    s += "\\midrule\n"
+    for v, n, reach, u90, b90, u99, b99 in thr_iso_rows():
+        s += _row([f"{v}", f"{n}", f"{reach:.1f}", f"{u90:.1f}", f"{b90:+.0f}", f"{u99:.1f}",
+                   f"{b99:+.0f}"])
+    s += "\\bottomrule\n\\end{tabular}\n"
+    return s
+
+
 TABLES = [
     ("data_splits.tex", table_splits),
     ("data_snapaccounting.tex", table_snapaccounting),
@@ -3577,6 +3709,7 @@ TABLES = [
     ("appendix_kendall_s1.tex", functools.partial(table_kendall, 1)),
     ("appendix_kendall_s2.tex", functools.partial(table_kendall, 2)),
     ("appendix_linear.tex", table_linear),
+    ("appendix_thresholds_iso.tex", table_thresholds_iso),
     # appendix_residue.tex and appendix_snapsens.tex are no longer written: Appendices D and G
     # were removed from the manuscript (user, 2026-09-24). table_residue/table_snapsens are kept.
 ]
